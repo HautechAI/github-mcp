@@ -1,0 +1,41 @@
+{
+  "name": "github-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GitHub MCP server over stdio",
+  "type": "module",
+  "packageManager": "pnpm@9.0.0",
+  "engines": { "node": ">=20" },
+  "main": "dist/server/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -w",
+    "start": "node dist/server/index.js",
+    "lint": "eslint .",
+    "format": "prettier -w .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:integration": "echo \"no integration tests by default\""
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@octokit/graphql": "^7.0.2",
+    "@octokit/plugin-paginate-rest": "^11.3.4",
+    "@octokit/plugin-retry": "^6.0.1",
+    "@octokit/plugin-throttling": "^9.3.0",
+    "@octokit/rest": "^21.0.2",
+    "pino": "^9.4.0",
+    "unzipper": "^0.12.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.12",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.0",
+    "nock": "^13.5.5",
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.3"
+  }
+}
