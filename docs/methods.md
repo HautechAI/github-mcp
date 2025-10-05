@@ -408,6 +408,7 @@ Inputs
 | cursor | string | no |  |  | GraphQL cursor |
 | limit | int | no | 30 |  | max 100 |
 | include_author | bool | no | false |  | adds author_login when true |
+| include_location | bool | no | false |  | when true, includes file/line mapping |
 
 Outputs
 
@@ -418,6 +419,16 @@ Outputs
 | items[].author_login | string | optional | present when include_author=true |
 | items[].created_at | string | always | iso8601 |
 | items[].updated_at | string | always | iso8601 |
+| items[].path | string | optional | present when include_location=true |
+| items[].line | int | optional | present when include_location=true |
+| items[].start_line | int | optional | present when include_location=true |
+| items[].side | string | optional | LEFT or RIGHT; present when include_location=true |
+| items[].start_side | string | optional | LEFT or RIGHT; present when include_location=true |
+| items[].original_line | int | optional | present when include_location=true |
+| items[].original_start_line | int | optional | present when include_location=true |
+| items[].diff_hunk | string | optional | present when include_location=true |
+| items[].commit_sha | string | optional | present when include_location=true |
+| items[].original_commit_sha | string | optional | present when include_location=true |
 | meta | object | always | next_cursor, has_more, rate.remaining, rate.used, rate.reset_at? |
 | error | object | optional | see Error shape |
 
@@ -426,17 +437,47 @@ API
 - Query
 
 ```graphql
-query ListPrReviewComments($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
+query ListPrReviewComments(
+  $owner: String!, $repo: String!, $number: Int!,
+  $first: Int = 30, $after: String
+) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
       reviewComments(first: $first, after: $after) {
-        nodes { id body createdAt updatedAt author { login } }
+        nodes {
+          id
+          body
+          createdAt
+          updatedAt
+          author { login }
+          # Location from PullRequestReviewComment
+          path
+          diffHunk
+          line
+          startLine
+          side
+          startSide
+          originalLine
+          originalStartLine
+          commit { oid }
+          originalCommit { oid }
+          # Thread location from PullRequestReviewThread (current PR mapping)
+          pullRequestReviewThread {
+            path
+            line
+            startLine
+            side
+            startSide
+          }
+        }
         pageInfo { hasNextPage endCursor }
       }
     }
   }
 }
 ```
+
+- Notes: Location fields are populated from PullRequestReviewComment and PullRequestReviewThread location fields. Thread-level grouping could be provided by a future `list_pr_review_threads_light` if needed.
 
 ## Tool: list_pr_reviews_light
 Purpose: List PR review summaries.
