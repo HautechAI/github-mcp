@@ -1,0 +1,96 @@
+name: CI (pnpm)
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  setup:
+    name: Setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+          run_install: true
+      - run: node -v && pnpm -v
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+          run_install: true
+      - run: pnpm run lint
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+          run_install: true
+      - run: pnpm run typecheck
+
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+          run_install: true
+      - run: pnpm test -- --run
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    if: ${{ secrets.IT_GITHUB_TOKEN != '' }}
+    needs: [setup, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+          run_install: true
+      - env:
+          GITHUB_TOKEN: ${{ secrets.IT_GITHUB_TOKEN }}
+          IT_OWNER: ${{ secrets.IT_OWNER }}
+          IT_REPO: ${{ secrets.IT_REPO }}
+          IT_PR_NUMBER: ${{ secrets.IT_PR_NUMBER }}
+        run: pnpm run test:integration --if-present
