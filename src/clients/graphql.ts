@@ -1,4 +1,5 @@
 import { graphql as graphqlImpl } from '@octokit/graphql';
+import fetch from 'cross-fetch';
 import { getConfig } from '../utils/config.js';
 
 export function createGraphqlClient() {
@@ -11,5 +12,5 @@ export function createGraphqlClient() {
       'X-GitHub-Api-Version': '2022-11-28',
     },
   });
-  return graphql;
+  return graphql as any;
 }

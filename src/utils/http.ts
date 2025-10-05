@@ -1,7 +1,8 @@
 import unzipper from 'unzipper';
+import fetch from 'cross-fetch';
 
 export async function downloadZipAndAggregateText(url: string): Promise<string> {
-  const res = await fetch(url);
+  const res = await fetch(url as any);
   if (!res.ok) {
     throw new Error(`Failed to download logs: HTTP ${res.status}`);
   }

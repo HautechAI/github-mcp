@@ -41,7 +41,7 @@ export async function listWorkflowRunsLight(input: ListWorkflowRunsInput) {
       owner: input.owner,
       repo: input.repo,
       workflow_id: input.workflow_id as any,
-      status: input.status,
+      status: input.status as any,
       branch: input.branch,
       actor: input.actor,
       event: input.event,
@@ -55,8 +55,8 @@ export async function listWorkflowRunsLight(input: ListWorkflowRunsInput) {
       id: r.id,
       run_number: r.run_number,
       event: r.event,
-      status: r.status,
-      conclusion: r.conclusion ?? null,
+      status: r.status as any,
+      conclusion: (r.conclusion ?? null) as any,
       head_sha: r.head_sha,
       created_at: r.created_at,
       updated_at: r.updated_at,
@@ -131,7 +131,7 @@ export async function getWorkflowJobLogs(input: GetWorkflowJobLogsInput) {
       owner: input.owner,
       repo: input.repo,
       job_id: input.job_id,
-      request: { fetch: (url: any, opts: any) => fetch(url, { ...opts, redirect: 'manual' }) },
+      request: { fetch: (url: any, opts: any) => (globalThis as any).fetch(url, { ...opts, redirect: 'manual' }) },
       headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
     } as any);
     const location = (baseRequest.headers as any)?.location || (baseRequest.headers as any)?.Location;

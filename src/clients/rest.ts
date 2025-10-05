@@ -2,6 +2,7 @@ import { Octokit } from '@octokit/rest';
 import { retry } from '@octokit/plugin-retry';
 import { throttling } from '@octokit/plugin-throttling';
 import { paginateRest } from '@octokit/plugin-paginate-rest';
+import fetch from 'cross-fetch';
 import { getConfig } from '../utils/config.js';
 
 const MyOctokit = Octokit.plugin(retry, throttling, paginateRest);
