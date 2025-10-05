@@ -11,7 +11,7 @@ Tools Index
 - Workflows: [list_workflows_light](#tool-list_workflows_light), [list_workflow_runs_light](#tool-list_workflow_runs_light), [get_workflow_run_light](#tool-get_workflow_run_light), [list_workflow_jobs_light](#tool-list_workflow_jobs_light), [get_workflow_job_logs](#tool-get_workflow_job_logs), [rerun_workflow_run](#tool-rerun_workflow_run), [rerun_workflow_run_failed](#tool-rerun_workflow_run_failed), [cancel_workflow_run](#tool-cancel_workflow_run)
 
 Shared conventions
-- Pagination (inputs): cursor (string, optional), limit (int, default 30, max 100). For REST fallbacks, server maps cursor to page/per_page.
+- Pagination (inputs): cursor (string, optional), limit (int, default 30, max 100). For REST tools, server maps cursor to page/per_page.
 - Pagination (outputs): meta.next_cursor (string or null), meta.has_more (bool).
 - Rate limit meta (outputs): meta.rate { remaining (int), used (int), reset_at (iso8601, optional) }.
 - Error shape: omitted on success; present as below.
@@ -94,9 +94,23 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Preferred: GraphQL (fallback: REST)
-- GraphQL: repository -> issues(after: $cursor, first: $limit, states, labels, filterBy) fields: id, number, title, state, createdAt, updatedAt, author { login }
-- REST: GET /repos/{owner}/{repo}/issues?state=&labels=&creator=&assignee=&since=&sort=&direction=&per_page=&page
+- GraphQL only
+- Query
+
+```graphql
+query ListIssues(
+  $owner: String!, $repo: String!,
+  $first: Int = 30, $after: String,
+  $states: [IssueState!], $filterBy: IssueFilters
+) {
+  repository(owner: $owner, name: $repo) {
+    issues(first: $first, after: $after, states: $states, filterBy: $filterBy) {
+      nodes { id number title state createdAt updatedAt author { login } }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+}
+```
 
 ## Tool: get_issue
 Purpose: Get a single issue with minimal fields.
@@ -126,9 +140,18 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Preferred: GraphQL (fallback: REST)
-- GraphQL: repository { issue(number: $n) { id number title state createdAt updatedAt author { login } body } }
-- REST: GET /repos/{owner}/{repo}/issues/{number}
+- GraphQL only
+- Query
+
+```graphql
+query GetIssue($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    issue(number: $number) {
+      id number title body state createdAt updatedAt author { login }
+    }
+  }
+}
+```
 
 ## Tool: list_issue_comments_plain
 Purpose: List issue comments (plain) with minimal fields.
@@ -157,9 +180,21 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Preferred: GraphQL (fallback: REST)
-- GraphQL: repository { issue(number: $n) { comments(first: $limit, after: $cursor) { nodes { id body createdAt updatedAt author { login } } } } }
-- REST: GET /repos/{owner}/{repo}/issues/{number}/comments?per_page=&page
+- GraphQL only
+- Query
+
+```graphql
+query ListIssueComments($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
+  repository(owner: $owner, name: $repo) {
+    issue(number: $number) {
+      comments(first: $first, after: $after) {
+        nodes { id body createdAt updatedAt author { login } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}
+```
 
 PULL REQUESTS
 
@@ -194,9 +229,27 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Preferred: GraphQL (fallback: REST)
-- GraphQL: repository { pullRequests(first: $limit, after: $cursor, states, baseRefName: $base, headRefName: $head, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { id number title state createdAt updatedAt author { login } } pageInfo { hasNextPage endCursor } } }
-- REST: GET /repos/{owner}/{repo}/pulls?state=&head=&base=&per_page=&page
+- GraphQL only
+- Query
+
+```graphql
+query ListPullRequests(
+  $owner: String!, $repo: String!,
+  $first: Int = 30, $after: String,
+  $states: [PullRequestState!], $base: String, $head: String
+) {
+  repository(owner: $owner, name: $repo) {
+    pullRequests(
+      first: $first, after: $after,
+      states: $states, baseRefName: $base, headRefName: $head,
+      orderBy: { field: UPDATED_AT, direction: DESC }
+    ) {
+      nodes { id number title state createdAt updatedAt author { login } }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+}
+```
 
 ## Tool: get_pull_request
 Purpose: Get a single pull request with minimal fields.
@@ -229,9 +282,18 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Preferred: GraphQL (fallback: REST)
-- GraphQL: repository { pullRequest(number: $n) { id number title state isDraft createdAt updatedAt merged mergedAt author { login } body } }
-- REST: GET /repos/{owner}/{repo}/pulls/{number}
+- GraphQL only
+- Query
+
+```graphql
+query GetPullRequest($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      id number title body state isDraft merged mergedAt createdAt updatedAt author { login }
+    }
+  }
+}
+```
 
 ## Tool: get_pr_status_summary
 Purpose: Summarize the latest commit status/checks for a PR.
@@ -259,13 +321,36 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Preferred: GraphQL (fallback: REST)
-- GraphQL: repository { pullRequest(number: $n) { commits(last: 1) { nodes { commit { oid statusCheckRollup { state contexts(first: $limit) { nodes { ... on CheckRun { name conclusion } ... on StatusContext { context state } } } } } } } } }
-- Notes: GraphQL returns a union of CheckRun and StatusContext. Map state/conclusion to SUCCESS/PENDING/FAILURE. failing_contexts use CheckRun.name or StatusContext.context where failure is indicated.
-- REST fallback:
-  - GET /repos/{owner}/{repo}/pulls/{number} -> head.sha
-  - GET /repos/{owner}/{repo}/commits/{sha}/status
-  - GET /repos/{owner}/{repo}/commits/{sha}/check-runs
+- GraphQL only
+- Query (demonstrates union handling via inline fragments)
+
+```graphql
+query GetPrStatusSummary($owner: String!, $repo: String!, $number: Int!, $limit_contexts: Int = 10) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      commits(last: 1) {
+        nodes {
+          commit {
+            oid
+            statusCheckRollup {
+              state
+              contexts(first: $limit_contexts) {
+                nodes {
+                  __typename
+                  ... on CheckRun { name conclusion }
+                  ... on StatusContext { context state }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+- Notes: GraphQL returns a union of CheckRun and StatusContext. Map state/conclusion to SUCCESS/PENDING/FAILURE. failing_contexts derive from CheckRun.name or StatusContext.context where a failure is indicated.
 
 ## Tool: list_pr_comments_plain
 Purpose: List PR issue comments (not code review comments).
@@ -294,9 +379,21 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Preferred: GraphQL (fallback: REST)
-- GraphQL: repository { pullRequest(number: $n) { comments(first: $limit, after: $cursor) { nodes { id body createdAt updatedAt author { login } } } } }
-- REST: GET /repos/{owner}/{repo}/issues/{number}/comments
+- GraphQL only
+- Query
+
+```graphql
+query ListPrComments($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      comments(first: $first, after: $after) {
+        nodes { id body createdAt updatedAt author { login } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}
+```
 
 ## Tool: list_pr_review_comments_plain
 Purpose: List PR code review comments (inline comments) with minimal fields.
@@ -325,9 +422,21 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Preferred: GraphQL (fallback: REST)
-- GraphQL: repository { pullRequest(number: $n) { reviewComments(first: $limit, after: $cursor) { nodes { id body createdAt updatedAt author { login } } } } }
-- REST: GET /repos/{owner}/{repo}/pulls/{number}/comments
+- GraphQL only
+- Query
+
+```graphql
+query ListPrReviewComments($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      reviewComments(first: $first, after: $after) {
+        nodes { id body createdAt updatedAt author { login } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}
+```
 
 ## Tool: list_pr_reviews_light
 Purpose: List PR review summaries.
@@ -355,9 +464,21 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Preferred: GraphQL (fallback: REST)
-- GraphQL: repository { pullRequest(number: $n) { reviews(first: $limit, after: $cursor) { nodes { id state submittedAt author { login } } } } }
-- REST: GET /repos/{owner}/{repo}/pulls/{number}/reviews
+- GraphQL only
+- Query
+
+```graphql
+query ListPrReviews($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      reviews(first: $first, after: $after) {
+        nodes { id state submittedAt author { login } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}
+```
 
 ## Tool: list_pr_commits_light
 Purpose: List commits of a PR with minimal fields.
@@ -385,9 +506,23 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Preferred: GraphQL (fallback: REST)
-- GraphQL: repository { pullRequest(number: $n) { commits(first: $limit, after: $cursor) { nodes { commit { oid messageHeadline authoredDate author { user { login } } } } } } }
-- REST: GET /repos/{owner}/{repo}/pulls/{number}/commits
+- GraphQL only
+- Query
+
+```graphql
+query ListPrCommits($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      commits(first: $first, after: $after) {
+        nodes {
+          commit { oid messageHeadline authoredDate author { user { login } } }
+        }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}
+```
 
 ## Tool: list_pr_files_light
 Purpose: List files changed in a PR with optional patch inclusion.
@@ -418,8 +553,11 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Required: REST
-- REST: GET /repos/{owner}/{repo}/pulls/{number}/files?per_page=&page (omit patch unless include_patch=true)
+- REST only
+- Method: GET
+- Path: /repos/{owner}/{repo}/pulls/{number}/files?per_page=&page
+- Accept: application/vnd.github+json
+- Notes: Omit `patch` unless `include_patch=true`. Include header `X-GitHub-Api-Version: 2022-11-28`.
 
 ## Tool: get_pr_diff
 Purpose: Get unified diff for a PR.
@@ -441,8 +579,11 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Required: REST
-- REST: GET /repos/{owner}/{repo}/pulls/{number} with Accept: application/vnd.github.v3.diff
+- REST only
+- Method: GET
+- Path: /repos/{owner}/{repo}/pulls/{number}
+- Accept: application/vnd.github.v3.diff
+- Notes: Include header `X-GitHub-Api-Version: 2022-11-28`.
 
 ## Tool: get_pr_patch
 Purpose: Get patch for a PR.
@@ -464,8 +605,11 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Required: REST
-- REST: GET /repos/{owner}/{repo}/pulls/{number} with Accept: application/vnd.github.v3.patch
+- REST only
+- Method: GET
+- Path: /repos/{owner}/{repo}/pulls/{number}
+- Accept: application/vnd.github.v3.patch
+- Notes: Include header `X-GitHub-Api-Version: 2022-11-28`.
 
 WORKFLOWS (GitHub Actions)
 
@@ -493,8 +637,11 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Required: REST
-- REST: GET /repos/{owner}/{repo}/actions/workflows?per_page=&page
+- REST only
+- Method: GET
+- Path: /repos/{owner}/{repo}/actions/workflows?per_page=&page
+- Accept: application/vnd.github+json
+- Notes: Include header `X-GitHub-Api-Version: 2022-11-28`.
 
 ## Tool: list_workflow_runs_light
 Purpose: List workflow runs for a workflow id with minimal fields.
@@ -531,8 +678,11 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Required: REST
-- REST: GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs?status=&branch=&actor=&event=&created=&head_sha=&per_page=&page
+- REST only
+- Method: GET
+- Path: /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs?status=&branch=&actor=&event=&created=&head_sha=&per_page=&page
+- Accept: application/vnd.github+json
+- Notes: Include header `X-GitHub-Api-Version: 2022-11-28`.
 
 ## Tool: get_workflow_run_light
 Purpose: Get a single workflow run with minimal fields.
@@ -562,8 +712,11 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Required: REST
-- REST: GET /repos/{owner}/{repo}/actions/runs/{run_id}?exclude_pull_requests=true|false
+- REST only
+- Method: GET
+- Path: /repos/{owner}/{repo}/actions/runs/{run_id}?exclude_pull_requests=true|false
+- Accept: application/vnd.github+json
+- Notes: Include header `X-GitHub-Api-Version: 2022-11-28`.
 
 ## Tool: list_workflow_jobs_light
 Purpose: List jobs for a workflow run.
@@ -593,8 +746,11 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Required: REST
-- REST: GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs?filter=&per_page=&page
+- REST only
+- Method: GET
+- Path: /repos/{owner}/{repo}/actions/runs/{run_id}/jobs?filter=&per_page=&page
+- Accept: application/vnd.github+json
+- Notes: Include header `X-GitHub-Api-Version: 2022-11-28`.
 
 ## Tool: get_workflow_job_logs
 Purpose: Fetch logs for a workflow job, optionally tailing locally.
@@ -619,9 +775,11 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Required: REST
-- REST: GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs
-- Notes: GitHub returns HTTP 302 to a temporary ZIP of logs. Server follows redirect, downloads ZIP, extracts text, and may tail locally. Tail and timestamp inclusion are server behaviors.
+- REST only
+- Method: GET
+- Path: /repos/{owner}/{repo}/actions/jobs/{job_id}/logs
+- Accept: application/vnd.github+json
+- Notes: GitHub returns HTTP 302 to a temporary ZIP of logs. Server follows redirect, downloads ZIP, extracts text, and may tail locally. Tail and timestamp inclusion are server behaviors. Include header `X-GitHub-Api-Version: 2022-11-28`.
 
 ## Tool: rerun_workflow_run
 Purpose: Rerun a workflow run.
@@ -644,8 +802,11 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Required: REST
-- REST: POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun
+- REST only
+- Method: POST
+- Path: /repos/{owner}/{repo}/actions/runs/{run_id}/rerun
+- Accept: application/vnd.github+json
+- Notes: Include header `X-GitHub-Api-Version: 2022-11-28`.
 
 ## Tool: rerun_workflow_run_failed
 Purpose: Rerun only failed jobs of a workflow run.
@@ -668,8 +829,11 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Required: REST
-- REST: POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun-failed-jobs
+- REST only
+- Method: POST
+- Path: /repos/{owner}/{repo}/actions/runs/{run_id}/rerun-failed-jobs
+- Accept: application/vnd.github+json
+- Notes: Include header `X-GitHub-Api-Version: 2022-11-28`.
 
 ## Tool: cancel_workflow_run
 Purpose: Cancel a workflow run.
@@ -691,8 +855,11 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- Required: REST
-- REST: POST /repos/{owner}/{repo}/actions/runs/{run_id}/cancel
+- REST only
+- Method: POST
+- Path: /repos/{owner}/{repo}/actions/runs/{run_id}/cancel
+- Accept: application/vnd.github+json
+- Notes: Include header `X-GitHub-Api-Version: 2022-11-28`.
 
 Cross-cutting notes
 - Pagination model
@@ -705,11 +872,11 @@ Cross-cutting notes
 - Authentication
   - Token managed by server; tools only require owner/repo and identifiers. No URLs or web links returned by default.
 - API choices rationale
-  - GraphQL preferred for list/get of issues/PRs/comments/reviews/commits due to selective fields and cursor pagination.
-  - REST required for: diffs/patches (media types), PR files (patch access, stable REST pagination), and all Actions workflow operations and logs.
+  - GraphQL is used for list/get of issues/PRs/comments/reviews/commits due to selective fields and cursor pagination.
+  - REST is used for: diffs/patches (media types), PR files (patch access, stable REST pagination), and all Actions workflow operations and logs.
 - Comment payload discipline
   - "Plain" variants only include: id, body, author_login (optional), created_at, updated_at. No reactions, URLs, or user objects.
 - PR status summary
-  - Favor GraphQL statusCheckRollup for holistic state; fallback composes REST statuses and checks. Only expose minimal counts and optional failing contexts.
+  - Favor GraphQL statusCheckRollup for holistic state. Only expose minimal counts and optional failing contexts.
 - Diffs
   - Provide unified diff or patch as raw strings via REST Accept headers. Never embed file blobs or binary content.
