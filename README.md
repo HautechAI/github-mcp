@@ -1,5 +1,6 @@
 # github-mcp
 
+
 GitHub MCP server (Rust, stdio JSON-RPC).
 
 Quickstart
