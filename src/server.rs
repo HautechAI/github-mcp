@@ -748,7 +748,9 @@ fn handle_get_workflow_job_logs(id: Option<Id>, params: Value) -> Response {
         let url = format!("{}{}", cfg.api_url, path);
         let res = client
             .get(&url)
+            .bearer_auth(&cfg.token)
             .header("X-GitHub-Api-Version", &cfg.api_version)
+            .header("Accept", "application/vnd.github+json")
             .send()
             .await;
         let res = match res {
@@ -799,6 +801,7 @@ fn handle_get_workflow_job_logs(id: Option<Id>, params: Value) -> Response {
                 );
             }
             let loc = location.unwrap();
+            // Redirect target is a pre-signed ZIP URL; no auth required.
             let bin = match client.get(loc).send().await {
                 Ok(r) => r.bytes().await.ok(),
                 Err(_) => None,
@@ -843,6 +846,7 @@ fn handle_get_workflow_job_logs(id: Option<Id>, params: Value) -> Response {
             }
             let mut z = z.unwrap();
             let mut lines: Vec<String> = Vec::new();
+            let mut truncated_any = false;
             for i in 0..z.len() {
                 let mut file = z.by_index(i).unwrap();
                 if !file.name().ends_with(".txt") {
@@ -851,18 +855,18 @@ fn handle_get_workflow_job_logs(id: Option<Id>, params: Value) -> Response {
                 use std::io::Read;
                 let mut buf = String::new();
                 let _ = file.read_to_string(&mut buf);
-                for l in buf.lines() {
-                    lines.push(l.to_string());
+                // Tail per file if requested
+                let mut file_lines: Vec<String> = buf.lines().map(|l| l.to_string()).collect();
+                if let Some(tail) = input.tail_lines {
+                    if file_lines.len() > tail {
+                        truncated_any = true;
+                        let total = file_lines.len();
+                        file_lines = file_lines.split_off(total - tail);
+                    }
                 }
+                lines.extend(file_lines);
             }
-            let total = lines.len();
-            let mut truncated = false;
-            if let Some(tail) = input.tail_lines {
-                if tail < total {
-                    truncated = true;
-                    lines = lines.split_off(total - tail);
-                }
-            }
+            let truncated = truncated_any;
             if input.include_timestamps.unwrap_or(false) {
                 let now = chrono::Utc::now().to_rfc3339();
                 lines = lines
@@ -958,7 +962,9 @@ fn handle_rerun_workflow_run(id: Option<Id>, params: Value) -> Response {
         );
         let resp = client
             .post(format!("{}{}", cfg.api_url, path))
+            .bearer_auth(&cfg.token)
             .header("X-GitHub-Api-Version", &cfg.api_version)
+            .header("Accept", "application/vnd.github+json")
             .send()
             .await;
         let resp = match resp {
@@ -1056,7 +1062,9 @@ fn handle_rerun_workflow_run_failed(id: Option<Id>, params: Value) -> Response {
         );
         let resp = client
             .post(format!("{}{}", cfg.api_url, path))
+            .bearer_auth(&cfg.token)
             .header("X-GitHub-Api-Version", &cfg.api_version)
+            .header("Accept", "application/vnd.github+json")
             .send()
             .await;
         let resp = match resp {
@@ -1153,7 +1161,9 @@ fn handle_cancel_workflow_run(id: Option<Id>, params: Value) -> Response {
         );
         let resp = client
             .post(format!("{}{}", cfg.api_url, path))
+            .bearer_auth(&cfg.token)
             .header("X-GitHub-Api-Version", &cfg.api_version)
+            .header("Accept", "application/vnd.github+json")
             .send()
             .await;
         let resp = match resp {

@@ -36,6 +36,8 @@ pub fn build_client(cfg: &Config) -> reqwest::Result<Client> {
     let builder = Client::builder()
         .default_headers(default_headers)
         .timeout(Duration::from_secs(cfg.timeout_secs))
+        // Handle redirects explicitly in callers (e.g., logs ZIP).
+        .redirect(reqwest::redirect::Policy::none())
         .use_rustls_tls();
     builder.build()
 }
