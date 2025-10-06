@@ -1787,7 +1787,8 @@ fn handle_list_pr_files(id: Option<Id>, params: Value) -> Response {
         }
         let rate = resp.meta.rate;
         // No Link header available via rest_get_json; assume more pages if current page filled
-        let has_more = (resp.value.as_ref().map(|v| v.len()).unwrap_or(0) as i64) >= i64::from(per_page);
+        let has_more =
+            (resp.value.as_ref().map(|v| v.len()).unwrap_or(0) as i64) >= i64::from(per_page);
         let next_cursor = if has_more {
             Some(format!("page:{}", page + 1))
         } else {
