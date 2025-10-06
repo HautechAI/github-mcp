@@ -7,6 +7,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref (tag/branch/SHA) to build and release"
+        required: true
+        type: string
 
 jobs:
   build:
@@ -28,6 +33,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.90.0
@@ -181,5 +188,6 @@ jobs:
           files: |
             dist/github-mcp-*
             dist/SHA256SUMS.txt
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.release.tag_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
