@@ -7,4 +7,3 @@ pub struct RateMeta {
     pub used: Option<i32>,
     pub reset_at: Option<String>,
 }
-

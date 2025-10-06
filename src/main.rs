@@ -1,9 +1,9 @@
 mod cli;
 pub mod config;
 pub mod http;
-pub mod types;
 mod server;
 mod tools;
+pub mod types;
 
 use clap::Parser;
 
