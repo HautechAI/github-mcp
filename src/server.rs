@@ -126,6 +126,8 @@ fn handle_tools_call(id: Option<Id>, params: Value) -> Response {
         "list_issues" => handle_list_issues(id, call.arguments),
         "get_issue" => handle_get_issue(id, call.arguments),
         "list_issue_comments_plain" => handle_list_issue_comments(id, call.arguments),
+        "list_pull_requests" => handle_list_pull_requests(id, call.arguments),
+        "get_pull_request" => handle_get_pull_request(id, call.arguments),
         _ => rpc_error(id, -32601, &format!("Tool not found: {}", call.name), None),
     }
 }
@@ -216,6 +218,100 @@ fn handle_list_issues(id: Option<Id>, params: Value) -> Response {
         (Some(items), meta, None)
     });
     let out = ListIssuesOutput { items, meta, error: err };
+    rpc_ok(id, serde_json::to_value(out).unwrap())
+}
+
+fn handle_list_pull_requests(id: Option<Id>, params: Value) -> Response {
+    let input: ListPullRequestsInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
+    let Ok(limit) = enforce_limit(input.limit) else { return rpc_error(id, -32602, "Invalid limit (1..=100)", None) };
+    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (items, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
+        let query = r#"
+        query ListPullRequests($owner: String!, $repo: String!, $first: Int = 30, $after: String, $states: [PullRequestState!], $base: String, $head: String) {
+          repository(owner: $owner, name: $repo) {
+            pullRequests(first: $first, after: $after, states: $states, baseRefName: $base, headRefName: $head, orderBy: { field: UPDATED_AT, direction: DESC }) {
+              nodes { id number title state createdAt updatedAt author { login } }
+              pageInfo { hasNextPage endCursor }
+            }
+          }
+        }
+        "#;
+        #[derive(Deserialize)] struct Author { login: String }
+        #[derive(Deserialize)] struct Node { id: String, number: i64, title: String, state: String, createdAt: String, updatedAt: String, author: Option<Author> }
+        #[derive(Deserialize)] struct PRs { nodes: Vec<Node>, pageInfo: PageInfo }
+        #[derive(Deserialize)] struct Repo { pullRequests: PRs }
+        #[derive(Deserialize)] struct Data { repository: Option<Repo> }
+        let vars = serde_json::json!({
+            "owner": input.owner,
+            "repo": input.repo,
+            "first": limit as i64,
+            "after": input.cursor,
+            "states": input.state.map(|s| vec![s.to_uppercase()]),
+            "base": input.base,
+            "head": input.head,
+        });
+        let (data, _meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
+        if let Some(e) = err { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
+        let repo = match data.and_then(|d| d.repository) { Some(r) => r, None => return (None, Meta { next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Repository not found".into(), retriable: false })) };
+        let include_author = input.include_author.unwrap_or(false);
+        let items: Vec<ListPullRequestsItem> = repo.pullRequests.nodes.into_iter().map(|n| ListPullRequestsItem{
+            id: n.id,
+            number: n.number,
+            title: n.title,
+            state: n.state,
+            created_at: n.createdAt,
+            updated_at: n.updatedAt,
+            author_login: if include_author { n.author.map(|a| a.login) } else { None },
+        }).collect();
+        let meta = Meta { next_cursor: repo.pullRequests.pageInfo.endCursor, has_more: repo.pullRequests.pageInfo.hasNextPage, rate: None };
+        (Some(items), meta, None)
+    });
+    let out = ListPullRequestsOutput { items, meta, error: err };
+    rpc_ok(id, serde_json::to_value(out).unwrap())
+}
+
+fn handle_get_pull_request(id: Option<Id>, params: Value) -> Response {
+    let input: GetPullRequestInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
+    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
+        let query = r#"
+        query GetPullRequest($owner: String!, $repo: String!, $number: Int!) {
+          repository(owner: $owner, name: $repo) {
+            pullRequest(number: $number) {
+              id number title body state isDraft merged mergedAt createdAt updatedAt author { login }
+            }
+          }
+        }
+        "#;
+        #[derive(Deserialize)] struct Author { login: String }
+        #[derive(Deserialize)] struct PR { id: String, number: i64, title: String, body: Option<String>, state: String, isDraft: bool, merged: bool, mergedAt: Option<String>, createdAt: String, updatedAt: String, author: Option<Author> }
+        #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
+        #[derive(Deserialize)] struct Data { repository: Option<Repo> }
+        let vars = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number });
+        let (data, _meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
+        if let Some(e) = err { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
+        let pr = match data.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
+        let include_author = input.include_author.unwrap_or(false);
+        let item = GetPullRequestItem {
+            id: pr.id,
+            number: pr.number,
+            title: pr.title,
+            body: pr.body,
+            state: pr.state,
+            is_draft: pr.isDraft,
+            created_at: pr.createdAt,
+            updated_at: pr.updatedAt,
+            merged: pr.merged,
+            merged_at: pr.mergedAt,
+            author_login: if include_author { pr.author.map(|a| a.login) } else { None },
+        };
+        (Some(item), Meta{ next_cursor: None, has_more: false, rate: None }, None)
+    });
+    let out = GetPullRequestOutput { item, meta, error: err };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 

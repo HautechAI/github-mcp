@@ -83,7 +83,43 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
         }),
     };
 
-    vec![ping, list_issues, get_issue, list_issue_comments_plain]
+    let list_prs = ToolDescriptor {
+        name: "list_pull_requests".into(),
+        description: "List pull requests".into(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "owner": {"type": "string"},
+                "repo": {"type": "string"},
+                "state": {"type": "string", "enum": ["open","closed","all"]},
+                "base": {"type": "string"},
+                "head": {"type": "string"},
+                "cursor": {"type": "string"},
+                "limit": {"type": "integer"},
+                "include_author": {"type": "boolean"}
+            },
+            "required": ["owner", "repo"]
+        }),
+    };
+
+    let get_pr = ToolDescriptor {
+        name: "get_pull_request".into(),
+        description: "Get a single PR".into(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "owner": {"type": "string"},
+                "repo": {"type": "string"},
+                "number": {"type": "integer"},
+                "include_author": {"type": "boolean"}
+            },
+            "required": ["owner", "repo", "number"]
+        }),
+    };
+
+    vec![ping, list_issues, get_issue, list_issue_comments_plain, list_prs, get_pr]
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -164,3 +200,22 @@ pub struct ListIssueCommentsItem { pub id: String, pub body: String, #[serde(ski
 
 #[derive(Debug, Serialize)]
 pub struct ListIssueCommentsOutput { pub items: Option<Vec<ListIssueCommentsItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+
+// PR inputs/outputs
+#[derive(Debug, Deserialize)]
+pub struct ListPullRequestsInput { pub owner: String, pub repo: String, pub state: Option<String>, pub base: Option<String>, pub head: Option<String>, pub cursor: Option<String>, pub limit: Option<u32>, pub include_author: Option<bool> }
+
+#[derive(Debug, Serialize)]
+pub struct ListPullRequestsItem { pub id: String, pub number: i64, pub title: String, pub state: String, pub created_at: String, pub updated_at: String, #[serde(skip_serializing_if = "Option::is_none")] pub author_login: Option<String> }
+
+#[derive(Debug, Serialize)]
+pub struct ListPullRequestsOutput { pub items: Option<Vec<ListPullRequestsItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+
+#[derive(Debug, Deserialize)]
+pub struct GetPullRequestInput { pub owner: String, pub repo: String, pub number: i64, pub include_author: Option<bool> }
+
+#[derive(Debug, Serialize)]
+pub struct GetPullRequestItem { pub id: String, pub number: i64, pub title: String, #[serde(skip_serializing_if = "Option::is_none")] pub body: Option<String>, pub state: String, pub is_draft: bool, pub created_at: String, pub updated_at: String, pub merged: bool, #[serde(skip_serializing_if = "Option::is_none")] pub merged_at: Option<String>, #[serde(skip_serializing_if = "Option::is_none")] pub author_login: Option<String> }
+
+#[derive(Debug, Serialize)]
+pub struct GetPullRequestOutput { pub item: Option<GetPullRequestItem>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
