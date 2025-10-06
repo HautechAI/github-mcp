@@ -7,7 +7,7 @@ Design goals
 
 Tools Index
 - Issues: [list_issues](#tool-list_issues), [get_issue](#tool-get_issue), [list_issue_comments_plain](#tool-list_issue_comments_plain)
-- Pull Requests: [list_pull_requests](#tool-list_pull_requests), [get_pull_request](#tool-get_pull_request), [get_pr_status_summary](#tool-get_pr_status_summary), [list_pr_comments_plain](#tool-list_pr_comments_plain), [list_pr_review_comments_plain](#tool-list_pr_review_comments_plain), [list_pr_reviews_light](#tool-list_pr_reviews_light), [list_pr_commits_light](#tool-list_pr_commits_light), [list_pr_files_light](#tool-list_pr_files_light), [get_pr_diff](#tool-get_pr_diff), [get_pr_patch](#tool-get_pr_patch)
+- Pull Requests: [list_pull_requests](#tool-list_pull_requests), [get_pull_request](#tool-get_pull_request), [get_pr_status_summary](#tool-get_pr_status_summary), [list_pr_comments_plain](#tool-list_pr_comments_plain), [list_pr_review_comments_plain](#tool-list_pr_review_comments_plain), [list_pr_review_threads_light](#tool-list_pr_review_threads_light), [resolve_pr_review_thread](#tool-resolve_pr_review_thread), [unresolve_pr_review_thread](#tool-unresolve_pr_review_thread), [list_pr_reviews_light](#tool-list_pr_reviews_light), [list_pr_commits_light](#tool-list_pr_commits_light), [list_pr_files_light](#tool-list_pr_files_light), [get_pr_diff](#tool-get_pr_diff), [get_pr_patch](#tool-get_pr_patch)
 - Workflows: [list_workflows_light](#tool-list_workflows_light), [list_workflow_runs_light](#tool-list_workflow_runs_light), [get_workflow_run_light](#tool-get_workflow_run_light), [list_workflow_jobs_light](#tool-list_workflow_jobs_light), [get_workflow_job_logs](#tool-get_workflow_job_logs), [rerun_workflow_run](#tool-rerun_workflow_run), [rerun_workflow_run_failed](#tool-rerun_workflow_run_failed), [cancel_workflow_run](#tool-cancel_workflow_run)
 
 Shared conventions
@@ -478,6 +478,134 @@ query ListPrReviewComments(
 ```
 
 - Notes: Location fields are populated from PullRequestReviewComment and PullRequestReviewThread location fields. Thread-level grouping could be provided by a future `list_pr_review_threads_light` if needed.
+- Notes: Location fields are populated from PullRequestReviewComment and PullRequestReviewThread location fields. For thread-level grouping and resolution state, use [list_pr_review_threads_light](#tool-list_pr_review_threads_light).
+
+## Tool: list_pr_review_threads_light
+Purpose: List PR review threads (grouped inline discussions) with minimal fields.
+
+Inputs
+
+| name | type | required | default | allowed | notes |
+| --- | --- | --- | --- | --- | --- |
+| owner | string | yes |  |  |  |
+| repo | string | yes |  |  |  |
+| number | int | yes |  |  | PR number |
+| cursor | string | no |  |  | GraphQL cursor |
+| limit | int | no | 30 |  | max 100 |
+| include_author | bool | no | false |  | adds resolved_by_login when true |
+| include_location | bool | no | false |  | when true, includes file/line mapping |
+
+Outputs
+
+| field | type | presence | notes |
+| --- | --- | --- | --- |
+| items[].id | string | always | thread node id |
+| items[].is_resolved | bool | always |  |
+| items[].is_outdated | bool | always |  |
+| items[].comments_count | int | always | total comments in thread |
+| items[].resolved_by_login | string | optional | present when include_author=true and thread is resolved |
+| items[].path | string | optional | present when include_location=true |
+| items[].line | int | optional | present when include_location=true |
+| items[].start_line | int | optional | present when include_location=true |
+| items[].side | string | optional | LEFT or RIGHT; present when include_location=true |
+| items[].start_side | string | optional | LEFT or RIGHT; present when include_location=true |
+| meta | object | always | next_cursor, has_more, rate.remaining, rate.used, rate.reset_at? |
+| error | object | optional | see Error shape |
+
+API
+- GraphQL only
+- Query
+
+```graphql
+query ListPrReviewThreads(
+  $owner: String!, $repo: String!, $number: Int!,
+  $first: Int = 30, $after: String
+) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      reviewThreads(first: $first, after: $after) {
+        nodes {
+          id
+          isResolved
+          isOutdated
+          comments { totalCount }
+          resolvedBy { login }
+          path
+          line
+          startLine
+          side
+          startSide
+        }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}
+```
+
+## Tool: resolve_pr_review_thread
+Purpose: Resolve a single review thread on a PR.
+
+Inputs
+
+| name | type | required | default | allowed | notes |
+| --- | --- | --- | --- | --- | --- |
+| thread_id | string | yes |  |  | GraphQL node id of the thread |
+
+Outputs
+
+| field | type | presence | notes |
+| --- | --- | --- | --- |
+| ok | bool | always | true when mutation succeeds |
+| thread_id | string | always | id of the thread mutated |
+| is_resolved | bool | always | resolved state after mutation |
+| meta | object | always | rate.remaining, rate.used, rate.reset_at? |
+| error | object | optional | see Error shape |
+
+API
+- GraphQL only
+- Mutation
+
+```graphql
+mutation ResolvePrReviewThread($thread_id: ID!) {
+  resolveReviewThread(input: { threadId: $thread_id }) {
+    thread { id isResolved }
+  }
+  rateLimit { remaining used resetAt }
+}
+```
+
+## Tool: unresolve_pr_review_thread
+Purpose: Unresolve a single review thread on a PR.
+
+Inputs
+
+| name | type | required | default | allowed | notes |
+| --- | --- | --- | --- | --- | --- |
+| thread_id | string | yes |  |  | GraphQL node id of the thread |
+
+Outputs
+
+| field | type | presence | notes |
+| --- | --- | --- | --- |
+| ok | bool | always | true when mutation succeeds |
+| thread_id | string | always | id of the thread mutated |
+| is_resolved | bool | always | resolved state after mutation |
+| meta | object | always | rate.remaining, rate.used, rate.reset_at? |
+| error | object | optional | see Error shape |
+
+API
+- GraphQL only
+- Mutation
+
+```graphql
+mutation UnresolvePrReviewThread($thread_id: ID!) {
+  unresolveReviewThread(input: { threadId: $thread_id }) {
+    thread { id isResolved }
+  }
+  rateLimit { remaining used resetAt }
+}
+```
 
 ## Tool: list_pr_reviews_light
 Purpose: List PR review summaries.
