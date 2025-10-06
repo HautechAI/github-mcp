@@ -74,6 +74,12 @@ pub fn run_stdio_server() -> anyhow::Result<()> {
     );
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
+    // Debug aid: print received payload shape to stderr
+    eprintln!(
+        "[github-mcp] stdin bytes={} first20={}",
+        input.len(),
+        &input.chars().take(20).collect::<String>()
+    );
     // Note: for milestone 1, we accept a single request for simplicity; future work can stream.
     if input.trim().is_empty() {
         return Ok(());
