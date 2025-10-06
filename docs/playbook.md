@@ -6,7 +6,7 @@ Purpose
 
 Quick Links
 - Issues: [list_issues](./methods.md#tool-list_issues) · [get_issue](./methods.md#tool-get_issue) · [list_issue_comments_plain](./methods.md#tool-list_issue_comments_plain)
-- Pull Requests: [list_pull_requests](./methods.md#tool-list_pull_requests) · [get_pull_request](./methods.md#tool-get_pull_request) · [get_pr_status_summary](./methods.md#tool-get_pr_status_summary) · [list_pr_comments_plain](./methods.md#tool-list_pr_comments_plain) · [list_pr_review_comments_plain](./methods.md#tool-list_pr_review_comments_plain) · [list_pr_reviews_light](./methods.md#tool-list_pr_reviews_light) · [list_pr_commits_light](./methods.md#tool-list_pr_commits_light) · [list_pr_files_light](./methods.md#tool-list_pr_files_light) · [get_pr_diff](./methods.md#tool-get_pr_diff) · [get_pr_patch](./methods.md#tool-get_pr_patch)
+- Pull Requests: [list_pull_requests](./methods.md#tool-list_pull_requests) · [get_pull_request](./methods.md#tool-get_pull_request) · [get_pr_status_summary](./methods.md#tool-get_pr_status_summary) · [list_pr_comments_plain](./methods.md#tool-list_pr_comments_plain) · [list_pr_review_comments_plain](./methods.md#tool-list_pr_review_comments_plain) · [list_pr_review_threads_light](./methods.md#tool-list_pr_review_threads_light) · [resolve_pr_review_thread](./methods.md#tool-resolve_pr_review_thread) · [unresolve_pr_review_thread](./methods.md#tool-unresolve_pr_review_thread) · [list_pr_reviews_light](./methods.md#tool-list_pr_reviews_light) · [list_pr_commits_light](./methods.md#tool-list_pr_commits_light) · [list_pr_files_light](./methods.md#tool-list_pr_files_light) · [get_pr_diff](./methods.md#tool-get_pr_diff) · [get_pr_patch](./methods.md#tool-get_pr_patch)
 - Workflows (CI): [list_workflows_light](./methods.md#tool-list_workflows_light) · [list_workflow_runs_light](./methods.md#tool-list_workflow_runs_light) · [get_workflow_run_light](./methods.md#tool-get_workflow_run_light) · [list_workflow_jobs_light](./methods.md#tool-list_workflow_jobs_light) · [get_workflow_job_logs](./methods.md#tool-get_workflow_job_logs) · [rerun_workflow_run](./methods.md#tool-rerun_workflow_run) · [rerun_workflow_run_failed](./methods.md#tool-rerun_workflow_run_failed) · [cancel_workflow_run](./methods.md#tool-cancel_workflow_run)
 
 Guiding Principles
@@ -96,10 +96,31 @@ Scenario D — Quick PR triage in chat
 
 ---
 
+Scenario E — Resolve review comments after implementation
+1) List unresolved threads to verify scope
+- [list_pr_review_threads_light](./methods.md#tool-list_pr_review_threads_light)
+  - Why: get thread ids, resolved state, and optional file/line to jump to code. Filter client-side where is_resolved=false.
+
+2) Resolve threads that are addressed
+- For each thread you’ve fixed: [resolve_pr_review_thread](./methods.md#tool-resolve_pr_review_thread)
+  - Input: thread_id from step 1. Mutations are idempotent; resolving an already-resolved thread returns is_resolved=true.
+
+3) Recheck remaining threads
+- [list_pr_review_threads_light](./methods.md#tool-list_pr_review_threads_light)
+  - Why: confirm is_resolved now true. Paginate if needed via meta.next_cursor.
+
+4) Undo if needed (optional)
+- If you resolved by mistake: [unresolve_pr_review_thread](./methods.md#tool-unresolve_pr_review_thread)
+  - Input: same thread_id.
+
+Tips
+- Keep payloads lean: only set include_location=true when you need file/line mapping; include_author=true only if you need the resolver’s login.
+- Use small limits (e.g., 20–50) and follow meta.next_cursor for more threads.
+
 Rate limit and pagination habits
 - Always pass a limit; rely on meta.next_cursor to fetch more.
 - Watch meta.rate.remaining to decide whether to fetch heavy data (diffs/logs) now or later.
 
 Potential future additions
-- Thread-centric view (grouped inline comments, resolved state): a dedicated method such as list_pr_review_threads_light.
+- Bulk operations on review threads (batch resolve/unresolve) to reduce mutation round-trips.
 - Targeted file patch retrieval (single-file patch from a PR) to avoid full patch downloads.
