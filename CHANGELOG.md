@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file by Release Please.
 
+## [0.1.4](https://github.com/HautechAI/github-mcp/compare/v0.1.3...v0.1.4) (2025-10-06)
+
+
+### Bug Fixes
+
+* **release:** Normalize CRLF in checksum aggregation ([#30](https://github.com/HautechAI/github-mcp/issues/30)) ([e26621f](https://github.com/HautechAI/github-mcp/commit/e26621fe6190003c237044feb54b071f21335ffb))
+
 ## [0.1.3](https://github.com/HautechAI/github-mcp/compare/v0.1.2...v0.1.3) (2025-10-06)
 
 
