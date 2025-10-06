@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file by Release Please.
 
+## [0.1.3](https://github.com/HautechAI/github-mcp/compare/v0.1.2...v0.1.3) (2025-10-06)
+
+
+### Bug Fixes
+
+* **release:** robust Windows checksum path resolution and pre-hash check ([#24](https://github.com/HautechAI/github-mcp/issues/24), [#25](https://github.com/HautechAI/github-mcp/issues/25)) ([#26](https://github.com/HautechAI/github-mcp/issues/26)) ([a57f278](https://github.com/HautechAI/github-mcp/commit/a57f278d08600326768c4353bacff89cedb57789))
+
 ## [0.1.2](https://github.com/HautechAI/github-mcp/compare/v0.1.1...v0.1.2) (2025-10-06)
 
 
