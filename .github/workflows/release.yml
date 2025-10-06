@@ -1,0 +1,81 @@
+name: Release Binaries
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Artifacts
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: macos-14
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cross (Linux targets)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross
+      - name: Build
+        shell: bash
+        run: |
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=github-mcp
+          OUTDIR=dist/${{ matrix.target }}
+          mkdir -p "$OUTDIR"
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            cp target/${{ matrix.target }}/release/${BIN}.exe "$OUTDIR/"
+            (cd dist && sha256sum ${{ matrix.target }}/${BIN}.exe > ${{ matrix.target }}/SHA256SUMS.txt || shasum -a 256 ${{ matrix.target }}/${BIN}.exe > ${{ matrix.target }}/SHA256SUMS.txt)
+          else
+            cp target/${{ matrix.target }}/release/${BIN} "$OUTDIR/"
+            (cd dist && sha256sum ${{ matrix.target }}/${BIN} > ${{ matrix.target }}/SHA256SUMS.txt || shasum -a 256 ${{ matrix.target }}/${BIN} > ${{ matrix.target }}/SHA256SUMS.txt)
+          fi
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-mcp-${{ matrix.target }}
+          path: dist/${{ matrix.target }}/*
+
+  release:
+    name: Attach to Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: List artifacts
+        run: ls -R dist
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,11 +1,13 @@
-use assert_cmd::prelude::*;
-use predicates::prelude::*;
-use std::process::Command;
+use assert_cmd::Command;
 
 fn run(req: &serde_json::Value) -> anyhow::Result<String> {
     let mut cmd = Command::cargo_bin("github-mcp")?;
     let input = serde_json::to_string(req)?;
-    let assert = cmd.arg("--log-level").arg("warn").write_stdin(input).assert();
+    let assert = cmd
+        .arg("--log-level")
+        .arg("warn")
+        .write_stdin(input)
+        .assert();
     let output = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
     Ok(output)
 }

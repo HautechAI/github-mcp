@@ -1,11 +1,13 @@
 mod cli;
+pub mod config;
+pub mod http;
 mod server;
 mod tools;
+pub mod types;
 
-use clap::Parser;
+// clap::Parser is not used directly here; clap is used in cli module.
 
-#[tokio::main(flavor = "current_thread")] // stdio server loops synchronously for now
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
     let cmd = cli::build_cli();
     let matches = cmd.get_matches();
     let log_level = matches.get_one::<String>("log-level").cloned();
