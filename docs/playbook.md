@@ -6,8 +6,10 @@ Purpose
 
 Quick Links
 - Issues: [list_issues](./methods.md#tool-list_issues) · [get_issue](./methods.md#tool-get_issue) · [list_issue_comments_plain](./methods.md#tool-list_issue_comments_plain)
-- Pull Requests: [list_pull_requests](./methods.md#tool-list_pull_requests) · [get_pull_request](./methods.md#tool-get_pull_request) · [get_pr_status_summary](./methods.md#tool-get_pr_status_summary) · [list_pr_comments_plain](./methods.md#tool-list_pr_comments_plain) · [list_pr_review_comments_plain](./methods.md#tool-list_pr_review_comments_plain) · [list_pr_review_threads_light](./methods.md#tool-list_pr_review_threads_light) · [resolve_pr_review_thread](./methods.md#tool-resolve_pr_review_thread) · [unresolve_pr_review_thread](./methods.md#tool-unresolve_pr_review_thread) · [list_pr_reviews_light](./methods.md#tool-list_pr_reviews_light) · [list_pr_commits_light](./methods.md#tool-list_pr_commits_light) · [list_pr_files_light](./methods.md#tool-list_pr_files_light) · [get_pr_diff](./methods.md#tool-get_pr_diff) · [get_pr_patch](./methods.md#tool-get_pr_patch)
-- Workflows (CI): [list_workflows_light](./methods.md#tool-list_workflows_light) · [list_workflow_runs_light](./methods.md#tool-list_workflow_runs_light) · [get_workflow_run_light](./methods.md#tool-get_workflow_run_light) · [list_workflow_jobs_light](./methods.md#tool-list_workflow_jobs_light) · [get_workflow_job_logs](./methods.md#tool-get_workflow_job_logs) · [rerun_workflow_run](./methods.md#tool-rerun_workflow_run) · [rerun_workflow_run_failed](./methods.md#tool-rerun_workflow_run_failed) · [cancel_workflow_run](./methods.md#tool-cancel_workflow_run)
+- Pull Requests: [list_pull_requests](./methods.md#tool-list_pull_requests) · [search_pull_requests](./methods.md#tool-search_pull_requests) · [get_pull_request](./methods.md#tool-get_pull_request) · [get_pr_status_summary](./methods.md#tool-get_pr_status_summary) · [list_pr_comments_plain](./methods.md#tool-list_pr_comments_plain) · [list_pr_review_comments_plain](./methods.md#tool-list_pr_review_comments_plain) · [list_pr_review_threads_light](./methods.md#tool-list_pr_review_threads_light) · [resolve_pr_review_thread](./methods.md#tool-resolve_pr_review_thread) · [unresolve_pr_review_thread](./methods.md#tool-unresolve_pr_review_thread) · [list_pr_reviews_light](./methods.md#tool-list_pr_reviews_light) · [list_pr_commits_light](./methods.md#tool-list_pr_commits_light) · [list_pr_files_light](./methods.md#tool-list_pr_files_light) · [get_pr_diff](./methods.md#tool-get_pr_diff) · [get_pr_patch](./methods.md#tool-get_pr_patch) · [update_pull_request_branch](./methods.md#tool-update_pull_request_branch) · [pull_request_toggle_draft](./methods.md#tool-pull_request_toggle_draft)
+- Reviews (write): [create_or_submit_review](./methods.md#tool-create_or_submit_review) · [add_review_comment](./methods.md#tool-add_review_comment)
+- Triage helpers: [issues_add_labels](./methods.md#tool-issues_add_labels) · [issues_set_labels](./methods.md#tool-issues_set_labels) · [issues_remove_label](./methods.md#tool-issues_remove_label) · [pulls_request_reviewers](./methods.md#tool-pulls_request_reviewers) · [pulls_remove_requested_reviewers](./methods.md#tool-pulls_remove_requested_reviewers) · [issues_add_assignees](./methods.md#tool-issues_add_assignees) · [issues_remove_assignees](./methods.md#tool-issues_remove_assignees)
+- Workflows (CI): [list_workflows_light](./methods.md#tool-list_workflows_light) · [list_workflow_runs_light](./methods.md#tool-list_workflow_runs_light) · [get_workflow_run_light](./methods.md#tool-get_workflow_run_light) · [list_workflow_jobs_light](./methods.md#tool-list_workflow_jobs_light) · [get_workflow_job_logs](./methods.md#tool-get_workflow_job_logs) · [rerun_workflow_run](./methods.md#tool-rerun_workflow_run) · [rerun_workflow_run_failed](./methods.md#tool-rerun_workflow_run_failed) · [cancel_workflow_run](./methods.md#tool-cancel_workflow_run) · [actions_list_run_artifacts](./methods.md#tool-actions_list_run_artifacts) · [actions_download_artifact](./methods.md#tool-actions_download_artifact)
 
 Guiding Principles
 - Keep payloads lean: avoid include_* flags unless needed (e.g., include_location for review comments; include_patch for files).
@@ -71,7 +73,7 @@ Scenario C — CI checks failed on the PR
 2) Find the failing workflow run(s)
 - If you know the workflow: [list_workflow_runs_light](./methods.md#tool-list_workflow_runs_light) (filter by branch/event/head_sha)
 - If you don’t know the workflow: list workflows first → [list_workflows_light](./methods.md#tool-list_workflows_light), then choose the CI workflow and call list_workflow_runs_light.
-  - Tip: Get the PR’s head_sha from [get_pull_request](./methods.md#tool-get_pull_request) and pass as a filter to list_workflow_runs_light.
+  - Tip: Get the PR’s head_sha from [get_pull_request](./methods.md#tool-get_pull_request) (set include_head_sha=true) or from commits(last:1) via GraphQL, and pass as a filter to list_workflow_runs_light.
 
 3) Drill into failing jobs
 - [list_workflow_jobs_light](./methods.md#tool-list_workflow_jobs_light)
@@ -124,3 +126,76 @@ Rate limit and pagination habits
 Potential future additions
 - Bulk operations on review threads (batch resolve/unresolve) to reduce mutation round-trips.
 - Targeted file patch retrieval (single-file patch from a PR) to avoid full patch downloads.
+
+---
+
+Scenario F — Merge readiness triage
+1) Snapshot merge readiness
+- [get_pull_request](./methods.md#tool-get_pull_request) (include_merge_readiness=true, include_author=true)
+  - Why: review_decision, mergeable, merge_state_status, merge queue/auto-merge hints.
+
+2) Confirm CI rollup
+- [get_pr_status_summary](./methods.md#tool-get_pr_status_summary) (include_failing_contexts=true)
+  - Why: ensure overall_state is SUCCESS before attempting merge.
+
+3) Check unresolved review threads
+- [list_pr_review_threads_light](./methods.md#tool-list_pr_review_threads_light)
+  - Filter is_resolved=false; optionally include_location to jump to code.
+
+Tips
+- REVIEW_REQUIRED or failing CI usually blocks merge; CHANGES_REQUESTED suggests action on feedback.
+- If merge_state_status is BEHIND, consider Scenario G to update the branch.
+
+---
+
+Scenario G — Update PR branch from base
+1) Confirm head SHA to avoid races
+- [get_pull_request](./methods.md#tool-get_pull_request) (include_head_sha=true)
+
+2) Request update from base
+- [update_pull_request_branch](./methods.md#tool-update_pull_request_branch) (expected_head_sha=from step 1)
+  - Why: queue a server-side merge from base into the PR branch; safe-guard with expected_head_sha.
+
+3) Recheck CI after update
+- Repeat Scenario C to monitor runs triggered by the update.
+
+---
+
+Scenario H — Triage labels, reviewers, and assignees
+1) Labels
+- Add: [issues_add_labels](./methods.md#tool-issues_add_labels)
+- Replace all: [issues_set_labels](./methods.md#tool-issues_set_labels)
+- Remove one: [issues_remove_label](./methods.md#tool-issues_remove_label)
+
+2) Reviewers
+- Request: [pulls_request_reviewers](./methods.md#tool-pulls_request_reviewers)
+- Remove requests: [pulls_remove_requested_reviewers](./methods.md#tool-pulls_remove_requested_reviewers)
+
+3) Assignees
+- Add: [issues_add_assignees](./methods.md#tool-issues_add_assignees)
+- Remove: [issues_remove_assignees](./methods.md#tool-issues_remove_assignees)
+
+---
+
+Scenario I — Toggle draft/ready for review
+1) Fetch PR id and state
+- [get_pull_request](./methods.md#tool-get_pull_request)
+  - Keep the GraphQL id for the next step.
+
+2) Toggle state
+- [pull_request_toggle_draft](./methods.md#tool-pull_request_toggle_draft) (action=to_draft | ready_for_review)
+  - Why: communicate readiness without closing the PR.
+
+---
+
+Scenario J — Download CI artifacts
+1) Locate the run
+- Use Scenario C steps 1–3 to find the workflow run id.
+
+2) List artifacts for the run
+- [actions_list_run_artifacts](./methods.md#tool-actions_list_run_artifacts)
+  - Choose by name or size; note expiration.
+
+3) Download the desired artifact
+- [actions_download_artifact](./methods.md#tool-actions_download_artifact)
+  - Server returns base64-encoded ZIP bytes; save locally if needed.
