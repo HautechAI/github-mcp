@@ -1,6 +1,6 @@
 use crate::config::Config;
-// Re-export canonical RateMeta from tools to avoid duplication and unify JSON shape.
-pub use crate::tools::RateMeta;
+// Re-export canonical RateMeta from shared types to avoid duplication and unify JSON shape.
+pub use crate::types::RateMeta;
 use base64::Engine; // for URL_SAFE_NO_PAD.encode/decode
 use log::warn;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, RETRY_AFTER, USER_AGENT};

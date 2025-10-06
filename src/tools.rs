@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use crate::types::RateMeta;
 
 pub const PROTOCOL_VERSION: &str = "2024-11-01"; // align with codex-tools-mcp cadence
 
@@ -233,12 +234,7 @@ pub struct PingOutput {
 }
 
 // Shared result meta and error shapes used across tools.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-pub struct RateMeta {
-    pub remaining: Option<i32>,
-    pub used: Option<i32>,
-    pub reset_at: Option<String>,
-}
+// RateMeta lives in types.rs; use the shared definition to avoid duplication.
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Meta {
