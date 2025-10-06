@@ -1,8 +1,11 @@
 name: Release Binaries
 
+permissions:
+  contents: write
+
 on:
   release:
-    types: [created]
+    types: [published]
   workflow_dispatch:
 
 jobs:
