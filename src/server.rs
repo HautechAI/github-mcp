@@ -191,6 +191,7 @@ fn handle_list_issues(id: Option<Id>, params: Value) -> Response {
               pageInfo { hasNextPage endCursor }
             }
           }
+          rateLimit { remaining used resetAt }
         }
         "#;
         let vars = serde_json::json!({
@@ -220,7 +221,7 @@ fn handle_list_issues(id: Option<Id>, params: Value) -> Response {
         struct Repo { issues: RespIssues }
         #[derive(Deserialize)]
         struct Data { repository: Option<Repo> }
-        let (data, _meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
+        let (data, gql_meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
         if let Some(e) = err { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
         let repo = match data.and_then(|d| d.repository) { Some(r) => r, None => return (None, Meta { next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Repository not found".into(), retriable: false })) };
         let include_author = input.include_author.unwrap_or(false);
@@ -233,7 +234,7 @@ fn handle_list_issues(id: Option<Id>, params: Value) -> Response {
             updated_at: n.updatedAt,
             author_login: if include_author { n.author.map(|a| a.login) } else { None },
         }).collect();
-        let meta = Meta { next_cursor: repo.issues.pageInfo.endCursor, has_more: repo.issues.pageInfo.hasNextPage, rate: None };
+        let meta = Meta { next_cursor: repo.issues.pageInfo.endCursor, has_more: repo.issues.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
     });
     let out = ListIssuesOutput { items, meta, error: err };
@@ -259,7 +260,7 @@ fn handle_list_workflows(id: Option<Id>, params: Value) -> Response {
         if let Some(err) = resp.error { return (None, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
         let rate = resp.meta.rate;
         let items = resp.value.map(|v| v.workflows.into_iter().map(|w| WorkflowItem{ id: w.id, name: w.name, path: w.path, state: w.state }).collect());
-        let has_more = false; // GitHub does not always provide Link for workflows; can compute via total_count
+        let has_more = resp.headers.as_ref().map(|h| http::has_next_page_from_link(h)).unwrap_or(false);
         let next_cursor = if has_more { Some(http::encode_rest_cursor(http::RestCursor{ page: page+1, per_page })) } else { None };
         (items, Meta{ next_cursor, has_more, rate }, None)
     });
@@ -281,7 +282,7 @@ fn handle_list_workflow_runs(id: Option<Id>, params: Value) -> Response {
         if let Some(err) = resp.error { return (None, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
         let rate = resp.meta.rate;
         let items = resp.value.map(|v| v.workflow_runs.into_iter().map(|r| WorkflowRunItem{ id: r.id, run_number: r.run_number, event: r.event, status: r.status, conclusion: r.conclusion, head_sha: r.head_sha, created_at: r.created_at, updated_at: r.updated_at }).collect());
-        let has_more = false;
+        let has_more = resp.headers.as_ref().map(|h| http::has_next_page_from_link(h)).unwrap_or(false);
         let next_cursor = if has_more { Some(http::encode_rest_cursor(http::RestCursor{ page: page+1, per_page })) } else { None };
         (items, Meta{ next_cursor, has_more, rate }, None)
     });
@@ -324,7 +325,7 @@ fn handle_list_workflow_jobs(id: Option<Id>, params: Value) -> Response {
         if let Some(err) = resp.error { return (None, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
         let rate = resp.meta.rate;
         let items = resp.value.map(|v| v.jobs.into_iter().map(|j| WorkflowJobItem{ id: j.id, name: j.name, status: j.status, conclusion: j.conclusion, started_at: j.started_at, completed_at: j.completed_at }).collect());
-        let has_more = false;
+        let has_more = resp.headers.as_ref().map(|h| http::has_next_page_from_link(h)).unwrap_or(false);
         let next_cursor = if has_more { Some(http::encode_rest_cursor(http::RestCursor{ page: page+1, per_page })) } else { None };
         (items, Meta{ next_cursor, has_more, rate }, None)
     });
@@ -461,6 +462,7 @@ fn handle_list_pr_comments(id: Option<Id>, params: Value) -> Response {
               }
             }
           }
+          rateLimit { remaining used resetAt }
         }
         "#;
         #[derive(Deserialize)] struct Author { login: String }
@@ -470,7 +472,7 @@ fn handle_list_pr_comments(id: Option<Id>, params: Value) -> Response {
         #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
         #[derive(Deserialize)] struct Data { repository: Option<Repo> }
         let vars = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number, "first": limit as i64, "after": input.cursor });
-        let (data, _meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
+        let (data, gql_meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
         if let Some(e) = err { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
         let pr = match data.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
         let include_author = input.include_author.unwrap_or(false);
@@ -478,7 +480,7 @@ fn handle_list_pr_comments(id: Option<Id>, params: Value) -> Response {
             id: n.id, body: n.body, created_at: n.createdAt, updated_at: n.updatedAt,
             author_login: if include_author { n.author.map(|a| a.login) } else { None },
         }).collect();
-        let meta = Meta { next_cursor: pr.comments.pageInfo.endCursor, has_more: pr.comments.pageInfo.hasNextPage, rate: None };
+        let meta = Meta { next_cursor: pr.comments.pageInfo.endCursor, has_more: pr.comments.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
     });
     let out = ListPrCommentsOutput { items, meta, error: err };
@@ -509,6 +511,7 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
               }
             }
           }
+          rateLimit { remaining used resetAt }
         }
         "#;
         #[derive(Deserialize)] struct Author { login: String }
@@ -520,7 +523,7 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
         #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
         #[derive(Deserialize)] struct Data { repository: Option<Repo> }
         let vars = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number, "first": limit as i64, "after": input.cursor });
-        let (data, _meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
+        let (data, gql_meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
         if let Some(e) = err { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
         let pr = match data.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
         let include_author = input.include_author.unwrap_or(false);
@@ -539,7 +542,7 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
             commit_sha: if include_loc { n.commit.map(|c| c.oid) } else { None },
             original_commit_sha: if include_loc { n.originalCommit.map(|c| c.oid) } else { None },
         }).collect();
-        let meta = Meta { next_cursor: pr.reviewComments.pageInfo.endCursor, has_more: pr.reviewComments.pageInfo.hasNextPage, rate: None };
+        let meta = Meta { next_cursor: pr.reviewComments.pageInfo.endCursor, has_more: pr.reviewComments.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
     });
     let out = ListPrReviewCommentsOutput { items, meta, error: err };
@@ -566,6 +569,7 @@ fn handle_list_pr_review_threads(id: Option<Id>, params: Value) -> Response {
               }
             }
           }
+          rateLimit { remaining used resetAt }
         }
         "#;
         #[derive(Deserialize)] struct Author { login: String }
@@ -576,7 +580,7 @@ fn handle_list_pr_review_threads(id: Option<Id>, params: Value) -> Response {
         #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
         #[derive(Deserialize)] struct Data { repository: Option<Repo> }
         let vars = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number, "first": limit as i64, "after": input.cursor });
-        let (data, _meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
+        let (data, gql_meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
         if let Some(e) = err { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
         let pr = match data.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
         let include_author = input.include_author.unwrap_or(false);
@@ -593,7 +597,7 @@ fn handle_list_pr_review_threads(id: Option<Id>, params: Value) -> Response {
             side: if include_loc { map_side(n.side) } else { None },
             start_side: if include_loc { map_side(n.startSide) } else { None },
         }).collect();
-        let meta = Meta { next_cursor: pr.reviewThreads.pageInfo.endCursor, has_more: pr.reviewThreads.pageInfo.hasNextPage, rate: None };
+        let meta = Meta { next_cursor: pr.reviewThreads.pageInfo.endCursor, has_more: pr.reviewThreads.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
     });
     let out = ListPrReviewThreadsOutput { items, meta, error: err };
@@ -665,6 +669,7 @@ fn handle_list_pr_reviews(id: Option<Id>, params: Value) -> Response {
               }
             }
           }
+          rateLimit { remaining used resetAt }
         }
         "#;
         #[derive(Deserialize)] struct Author { login: String }
@@ -674,14 +679,14 @@ fn handle_list_pr_reviews(id: Option<Id>, params: Value) -> Response {
         #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
         #[derive(Deserialize)] struct Data { repository: Option<Repo> }
         let vars = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number, "first": limit as i64, "after": input.cursor });
-        let (data, _meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
+        let (data, gql_meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
         if let Some(e) = err { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
         let pr = match data.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
         let include_author = input.include_author.unwrap_or(false);
         let items: Vec<PrReviewItem> = pr.reviews.nodes.into_iter().map(|n| PrReviewItem{
             id: n.id, state: n.state, submitted_at: n.submittedAt, author_login: if include_author { n.author.map(|a| a.login) } else { None }
         }).collect();
-        let meta = Meta { next_cursor: pr.reviews.pageInfo.endCursor, has_more: pr.reviews.pageInfo.hasNextPage, rate: None };
+        let meta = Meta { next_cursor: pr.reviews.pageInfo.endCursor, has_more: pr.reviews.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
     });
     let out = ListPrReviewsOutput { items, meta, error: err };
@@ -705,6 +710,7 @@ fn handle_list_pr_commits(id: Option<Id>, params: Value) -> Response {
               }
             }
           }
+          rateLimit { remaining used resetAt }
         }
         "#;
         #[derive(Deserialize)] struct User { login: String }
@@ -716,7 +722,7 @@ fn handle_list_pr_commits(id: Option<Id>, params: Value) -> Response {
         #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
         #[derive(Deserialize)] struct Data { repository: Option<Repo> }
         let vars = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number, "first": limit as i64, "after": input.cursor });
-        let (data, _meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
+        let (data, gql_meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
         if let Some(e) = err { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
         let pr = match data.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
         let include_author = input.include_author.unwrap_or(false);
@@ -726,7 +732,7 @@ fn handle_list_pr_commits(id: Option<Id>, params: Value) -> Response {
             authored_at: n.commit.authoredDate,
             author_login: if include_author { n.commit.author.and_then(|a| a.user.map(|u| u.login)) } else { None },
         }).collect();
-        let meta = Meta { next_cursor: pr.commits.pageInfo.endCursor, has_more: pr.commits.pageInfo.hasNextPage, rate: None };
+        let meta = Meta { next_cursor: pr.commits.pageInfo.endCursor, has_more: pr.commits.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
     });
     let out = ListPrCommitsOutput { items, meta, error: err };
@@ -852,6 +858,7 @@ fn handle_list_pull_requests(id: Option<Id>, params: Value) -> Response {
               pageInfo { hasNextPage endCursor }
             }
           }
+          rateLimit { remaining used resetAt }
         }
         "#;
         #[derive(Deserialize)] struct Author { login: String }
@@ -868,7 +875,7 @@ fn handle_list_pull_requests(id: Option<Id>, params: Value) -> Response {
             "base": input.base,
             "head": input.head,
         });
-        let (data, _meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
+        let (data, gql_meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
         if let Some(e) = err { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
         let repo = match data.and_then(|d| d.repository) { Some(r) => r, None => return (None, Meta { next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Repository not found".into(), retriable: false })) };
         let include_author = input.include_author.unwrap_or(false);
@@ -881,7 +888,7 @@ fn handle_list_pull_requests(id: Option<Id>, params: Value) -> Response {
             updated_at: n.updatedAt,
             author_login: if include_author { n.author.map(|a| a.login) } else { None },
         }).collect();
-        let meta = Meta { next_cursor: repo.pullRequests.pageInfo.endCursor, has_more: repo.pullRequests.pageInfo.hasNextPage, rate: None };
+        let meta = Meta { next_cursor: repo.pullRequests.pageInfo.endCursor, has_more: repo.pullRequests.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
     });
     let out = ListPullRequestsOutput { items, meta, error: err };
@@ -901,6 +908,7 @@ fn handle_get_pull_request(id: Option<Id>, params: Value) -> Response {
               id number title body state isDraft merged mergedAt createdAt updatedAt author { login }
             }
           }
+          rateLimit { remaining used resetAt }
         }
         "#;
         #[derive(Deserialize)] struct Author { login: String }
@@ -908,7 +916,7 @@ fn handle_get_pull_request(id: Option<Id>, params: Value) -> Response {
         #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
         #[derive(Deserialize)] struct Data { repository: Option<Repo> }
         let vars = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number });
-        let (data, _meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
+        let (data, gql_meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
         if let Some(e) = err { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
         let pr = match data.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
         let include_author = input.include_author.unwrap_or(false);
@@ -925,7 +933,7 @@ fn handle_get_pull_request(id: Option<Id>, params: Value) -> Response {
             merged_at: pr.mergedAt,
             author_login: if include_author { pr.author.map(|a| a.login) } else { None },
         };
-        (Some(item), Meta{ next_cursor: None, has_more: false, rate: None }, None)
+        (Some(item), Meta{ next_cursor: None, has_more: false, rate: gql_meta.rate }, None)
     });
     let out = GetPullRequestOutput { item, meta, error: err };
     rpc_ok(id, serde_json::to_value(out).unwrap())

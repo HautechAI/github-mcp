@@ -30,6 +30,8 @@ pub struct RestResponse<T> {
     pub meta: Meta,
     pub error: Option<ErrorInfo>,
     pub status: StatusCode,
+    #[serde(skip)]
+    pub headers: Option<HeaderMap>,
 }
 
 pub fn build_client(cfg: &Config) -> reqwest::Result<Client> {
@@ -100,7 +102,7 @@ pub async fn rest_get_json<T: for<'de> Deserialize<'de>>(
         let res = match res { Ok(r) => r, Err(e) => {
             warn!("REST GET error sending request: {}", e);
             if attempt < 5 { tokio::time::sleep(compute_backoff(attempt, None)).await; attempt += 1; continue; }
-            return RestResponse { value: None, meta: Meta { rate: None }, error: Some(ErrorInfo{ code: "upstream_error".into(), message: e.to_string(), retriable: true }), status: StatusCode::INTERNAL_SERVER_ERROR };
+            return RestResponse { value: None, meta: Meta { rate: None }, error: Some(ErrorInfo{ code: "upstream_error".into(), message: e.to_string(), retriable: true }), status: StatusCode::INTERNAL_SERVER_ERROR, headers: None };
         }};
 
         let status = res.status();
@@ -111,10 +113,10 @@ pub async fn rest_get_json<T: for<'de> Deserialize<'de>>(
         if status.is_success() {
             match res.json::<T>().await {
                 Ok(val) => {
-                    return RestResponse { value: Some(val), meta: Meta { rate: Some(rate) }, error: None, status };
+                    return RestResponse { value: Some(val), meta: Meta { rate: Some(rate) }, error: None, status, headers: Some(headers) };
                 }
                 Err(e) => {
-                    return RestResponse { value: None, meta: Meta { rate: Some(rate) }, error: Some(ErrorInfo { code: "server_error".into(), message: e.to_string(), retriable: false }), status };
+                    return RestResponse { value: None, meta: Meta { rate: Some(rate) }, error: Some(ErrorInfo { code: "server_error".into(), message: e.to_string(), retriable: false }), status, headers: Some(headers) };
                 }
             }
         }
@@ -131,7 +133,7 @@ pub async fn rest_get_json<T: for<'de> Deserialize<'de>>(
         }
         let text = res.text().await.unwrap_or_default();
         let err = map_status_to_error(status, text);
-        return RestResponse { value: None, meta: Meta { rate: Some(rate) }, error: Some(err), status };
+        return RestResponse { value: None, meta: Meta { rate: Some(rate) }, error: Some(err), status, headers: Some(headers) };
     }
 }
 
@@ -154,7 +156,7 @@ pub async fn rest_get_text_with_accept(
 
         let res = match res { Ok(r) => r, Err(e) => {
             if attempt < 5 { tokio::time::sleep(compute_backoff(attempt, None)).await; attempt += 1; continue; }
-            return RestResponse { value: None, meta: Meta { rate: None }, error: Some(ErrorInfo{ code: "upstream_error".into(), message: e.to_string(), retriable: true }), status: StatusCode::INTERNAL_SERVER_ERROR };
+            return RestResponse { value: None, meta: Meta { rate: None }, error: Some(ErrorInfo{ code: "upstream_error".into(), message: e.to_string(), retriable: true }), status: StatusCode::INTERNAL_SERVER_ERROR, headers: None };
         }};
 
         let status = res.status();
@@ -163,7 +165,7 @@ pub async fn rest_get_text_with_accept(
         let retry_after = headers.get(RETRY_AFTER).and_then(|v| v.to_str().ok()).and_then(|s| s.parse::<u64>().ok()).map(Duration::from_secs);
         let text = res.text().await.unwrap_or_default();
         if status.is_success() {
-            return RestResponse { value: Some(text), meta: Meta { rate: Some(rate) }, error: None, status };
+            return RestResponse { value: Some(text), meta: Meta { rate: Some(rate) }, error: None, status, headers: Some(headers) };
         }
         if status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
             if attempt < 5 {
@@ -174,7 +176,7 @@ pub async fn rest_get_text_with_accept(
             }
         }
         let err = map_status_to_error(status, text);
-        return RestResponse { value: None, meta: Meta { rate: Some(rate) }, error: Some(err), status };
+        return RestResponse { value: None, meta: Meta { rate: Some(rate) }, error: Some(err), status, headers: Some(headers) };
     }
 }
 
@@ -223,19 +225,24 @@ pub async fn graphql_post<TReq: Serialize, TResp: for<'de> Deserialize<'de>, TRa
         let text = res.text().await.unwrap_or_default();
 
         if status.is_success() {
-            let parsed: Result<GraphQlResponse<TResp>, _> = serde_json::from_str(&text);
+            // Parse both typed and value to extract rateLimit if present
+            let v: serde_json::Value = match serde_json::from_str(&text) { Ok(v) => v, Err(e) => {
+                return (None, Meta { rate: None }, Some(ErrorInfo { code: "server_error".into(), message: e.to_string(), retriable: false }));
+            }};
+            let parsed: Result<GraphQlResponse<TResp>, _> = serde_json::from_value(v.clone());
             match parsed {
                 Ok(resp) => {
                     if let Some(errors) = resp.errors {
-                        // Secondary rate limit may appear as GraphQL errors; treat retriable on 429 hints.
                         let msg = errors.iter().map(|e| e.message.clone()).collect::<Vec<_>>().join("; ");
-                        return (
-                            None,
-                            Meta { rate: None },
-                            Some(ErrorInfo { code: "upstream_error".into(), message: msg, retriable: true }),
-                        );
+                        return (None, Meta { rate: None }, Some(ErrorInfo { code: "upstream_error".into(), message: msg, retriable: true }));
                     }
-                    return (resp.data, Meta { rate: None }, None);
+                    let rate = v.get("data").and_then(|d| d.get("rateLimit")).and_then(|rl| {
+                        let remaining = rl.get("remaining").and_then(|x| x.as_i64()).map(|x| x as i32);
+                        let used = rl.get("used").and_then(|x| x.as_i64()).map(|x| x as i32);
+                        let reset_at = rl.get("resetAt").and_then(|x| x.as_str()).map(|s| s.to_string());
+                        Some(RateMeta { remaining, used, reset_at })
+                    });
+                    return (resp.data, Meta { rate }, None);
                 }
                 Err(e) => {
                     return (None, Meta { rate: None }, Some(ErrorInfo { code: "server_error".into(), message: e.to_string(), retriable: false }));
