@@ -182,17 +182,15 @@ pub async fn rest_get_json<T: for<'de> Deserialize<'de>>(
         }
 
         // Retry on 429/5xx
-        if status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
-            if attempt < 5 {
-                let backoff = compute_backoff(attempt, retry_after);
-                warn!(
-                    "REST GET {} retrying (status {}), backoff {:?}",
-                    url, status, backoff
-                );
-                tokio::time::sleep(backoff).await;
-                attempt += 1;
-                continue;
-            }
+        if (status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error()) && attempt < 5 {
+            let backoff = compute_backoff(attempt, retry_after);
+            warn!(
+                "REST GET {} retrying (status {}), backoff {:?}",
+                url, status, backoff
+            );
+            tokio::time::sleep(backoff).await;
+            attempt += 1;
+            continue;
         }
         let text = res.text().await.unwrap_or_default();
         let err = map_status_to_error(status, text);
@@ -263,13 +261,11 @@ pub async fn rest_get_text_with_accept(
                 headers: Some(headers),
             };
         }
-        if status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
-            if attempt < 5 {
-                let backoff = compute_backoff(attempt, retry_after);
-                tokio::time::sleep(backoff).await;
-                attempt += 1;
-                continue;
-            }
+        if (status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error()) && attempt < 5 {
+            let backoff = compute_backoff(attempt, retry_after);
+            tokio::time::sleep(backoff).await;
+            attempt += 1;
+            continue;
         }
         let err = map_status_to_error(status, text);
         return RestResponse {
@@ -380,25 +376,22 @@ pub async fn graphql_post<
                             }),
                         );
                     }
-                    let rate = v
-                        .get("data")
-                        .and_then(|d| d.get("rateLimit"))
-                        .and_then(|rl| {
-                            let remaining = rl
-                                .get("remaining")
-                                .and_then(|x| x.as_i64())
-                                .map(|x| x as i32);
-                            let used = rl.get("used").and_then(|x| x.as_i64()).map(|x| x as i32);
-                            let reset_at = rl
-                                .get("resetAt")
-                                .and_then(|x| x.as_str())
-                                .map(|s| s.to_string());
-                            Some(RateMeta {
-                                remaining,
-                                used,
-                                reset_at,
-                            })
-                        });
+                    let rate = v.get("data").and_then(|d| d.get("rateLimit")).map(|rl| {
+                        let remaining = rl
+                            .get("remaining")
+                            .and_then(|x| x.as_i64())
+                            .map(|x| x as i32);
+                        let used = rl.get("used").and_then(|x| x.as_i64()).map(|x| x as i32);
+                        let reset_at = rl
+                            .get("resetAt")
+                            .and_then(|x| x.as_str())
+                            .map(|s| s.to_string());
+                        RateMeta {
+                            remaining,
+                            used,
+                            reset_at,
+                        }
+                    });
                     return (resp.data, Meta { rate }, None);
                 }
                 Err(e) => {
@@ -416,13 +409,11 @@ pub async fn graphql_post<
         }
 
         // Retry on 429/5xx
-        if status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
-            if attempt < 5 {
-                let retry_after = None;
-                tokio::time::sleep(compute_backoff(attempt, retry_after)).await;
-                attempt += 1;
-                continue;
-            }
+        if (status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error()) && attempt < 5 {
+            let retry_after = None;
+            tokio::time::sleep(compute_backoff(attempt, retry_after)).await;
+            attempt += 1;
+            continue;
         }
         let err = map_status_to_error(status, text);
         return (None, Meta { rate: None }, Some(err));
