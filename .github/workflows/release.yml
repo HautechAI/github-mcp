@@ -61,6 +61,14 @@ jobs:
             FILENAME="${BIN}-${{ matrix.target }}"
           fi
           cp "$SRC" "$OUTDIR/$FILENAME"
+          # Pre-hash sanity check to fail early (especially on Windows path issues)
+          if [[ ! -f "$OUTDIR/$FILENAME" ]]; then
+            echo "Expected file missing after copy: $OUTDIR/$FILENAME" >&2
+            echo "Listing $OUTDIR contents:" && ls -la "$OUTDIR" || true
+            exit 1
+          fi
+          # Export for PowerShell access via $Env:FILENAME
+          export FILENAME
           # Write per-target checksum file inside each OUTDIR
           # Ensure the recorded filename matches the final uploaded binary name (no path prefix)
           case "${{ matrix.os }}" in
@@ -71,7 +79,20 @@ jobs:
               HASH=$(shasum -a 256 "$OUTDIR/$FILENAME" | awk '{print $1}')
               ;;
             windows-latest)
-              HASH=$(powershell -NoProfile -Command "(Get-FileHash -Algorithm SHA256 -LiteralPath '$PWD/$OUTDIR/$FILENAME').Hash.ToLower()")
+              # Build Windows-native path using GITHUB_WORKSPACE and Join-Path; verify before hashing
+              HASH=$(powershell -NoProfile -Command "
+                $ErrorActionPreference = 'Stop'
+                $root = $Env:GITHUB_WORKSPACE
+                $p = Join-Path $root -ChildPath 'dist'
+                $p = Join-Path $p -ChildPath '${{ matrix.target }}'
+                $p = Join-Path $p -ChildPath $Env:FILENAME
+                Write-Host ('Final file path (Windows): ' + $p)
+                if (-not (Test-Path -LiteralPath $p)) {
+                  Write-Host ('File not found: ' + $p)
+                  exit 1
+                }
+                (Get-FileHash -Algorithm SHA256 -LiteralPath $p).Hash.ToLower()
+              " | tail -n 1)
               ;;
             *) echo "Unsupported OS ${{ matrix.os }}" >&2; exit 1;;
           esac
