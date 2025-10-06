@@ -52,13 +52,21 @@ jobs:
           BIN=github-mcp
           OUTDIR=dist/${{ matrix.target }}
           mkdir -p "$OUTDIR"
+          # Name outputs uniquely per target to avoid collisions when merging artifacts
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            cp target/${{ matrix.target }}/release/${BIN}.exe "$OUTDIR/"
-            (cd dist && sha256sum ${{ matrix.target }}/${BIN}.exe > ${{ matrix.target }}/SHA256SUMS.txt || shasum -a 256 ${{ matrix.target }}/${BIN}.exe > ${{ matrix.target }}/SHA256SUMS.txt)
+            SRC="target/${{ matrix.target }}/release/${BIN}.exe"
+            FILENAME="${BIN}-${{ matrix.target }}.exe"
           else
-            cp target/${{ matrix.target }}/release/${BIN} "$OUTDIR/"
-            (cd dist && sha256sum ${{ matrix.target }}/${BIN} > ${{ matrix.target }}/SHA256SUMS.txt || shasum -a 256 ${{ matrix.target }}/${BIN} > ${{ matrix.target }}/SHA256SUMS.txt)
+            SRC="target/${{ matrix.target }}/release/${BIN}"
+            FILENAME="${BIN}-${{ matrix.target }}"
           fi
+          cp "$SRC" "$OUTDIR/$FILENAME"
+          # Write per-target checksum file inside each OUTDIR
+          (
+            cd dist
+            sha256sum "${{ matrix.target }}/$FILENAME" > "${{ matrix.target }}/SHA256SUMS-${{ matrix.target }}.txt" \
+              || shasum -a 256 "${{ matrix.target }}/$FILENAME" > "${{ matrix.target }}/SHA256SUMS-${{ matrix.target }}.txt"
+          )
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -76,9 +84,34 @@ jobs:
           merge-multiple: true
       - name: List artifacts
         run: ls -R dist
+      - name: Combine checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob globstar
+          files=(dist/**/SHA256SUMS-*.txt)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No per-target checksum files found"
+            exit 1
+          fi
+          cat "${files[@]}" > dist/SHA256SUMS.txt
+          echo "Combined checksums count:" && wc -l dist/SHA256SUMS.txt
+      - name: Collect binaries to dist root
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob globstar
+          # Move uniquely named binaries to dist/ root for release upload
+          for f in dist/**/github-mcp-*; do
+            [[ -f "$f" ]] || continue
+            mv -f "$f" dist/
+          done
+          echo "Assets in dist/:" && ls -l dist/
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/**/*
+          files: |
+            dist/github-mcp-*
+            dist/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
