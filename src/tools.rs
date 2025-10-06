@@ -233,7 +233,7 @@ pub struct PingOutput {
 }
 
 // Shared result meta and error shapes used across tools.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct RateMeta {
     pub remaining: Option<i32>,
     pub used: Option<i32>,

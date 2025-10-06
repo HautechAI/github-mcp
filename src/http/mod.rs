@@ -1,17 +1,12 @@
 use crate::config::Config;
+// Re-export canonical RateMeta from tools to avoid duplication and unify JSON shape.
+pub use crate::tools::RateMeta;
 use base64::Engine; // for URL_SAFE_NO_PAD.encode/decode
 use log::warn;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, RETRY_AFTER, USER_AGENT};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct RateMeta {
-    pub remaining: Option<i32>,
-    pub used: Option<i32>,
-    pub reset_at: Option<String>,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ErrorInfo {

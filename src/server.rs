@@ -827,7 +827,7 @@ fn handle_get_workflow_job_logs(id: Option<Id>, params: Value) -> Response {
             let bytes = bin.unwrap();
             // unzip and aggregate .txt files
             let mut cursor = std::io::Cursor::new(bytes);
-            let mut z = zip::ZipArchive::new(&mut cursor)
+            let z = zip::ZipArchive::new(&mut cursor)
                 .map_err(|e| e.to_string())
                 .ok();
             if z.is_none() {
@@ -1462,7 +1462,7 @@ fn handle_resolve_pr_review_thread(id: Option<Id>, params: Value) -> Response {
         struct Resolved {
             thread: Thread,
         }
-        let vars = serde_json::json!({ "thread_id": input.thread_id });
+        let vars = serde_json::json!({ "thread_id": input.thread_id.clone() });
         let (data, _meta, err) = http::graphql_post::<serde_json::Value, Resp, serde_json::Value>(
             &client, &cfg, query, &vars,
         )
@@ -1556,7 +1556,7 @@ fn handle_unresolve_pr_review_thread(id: Option<Id>, params: Value) -> Response 
         struct Resolved {
             thread: Thread,
         }
-        let vars = serde_json::json!({ "thread_id": input.thread_id });
+        let vars = serde_json::json!({ "thread_id": input.thread_id.clone() });
         let (data, _meta, err) = http::graphql_post::<serde_json::Value, Resp, serde_json::Value>(
             &client, &cfg, query, &vars,
         )
