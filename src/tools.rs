@@ -404,3 +404,40 @@ pub struct ListPrFilesOutput { pub items: Option<Vec<PrFileItem>>, pub meta: Met
 pub struct GetPrTextInput { pub owner: String, pub repo: String, pub number: i64 }
 #[derive(Debug, Serialize)]
 pub struct GetPrTextOutput { pub diff: Option<String>, pub patch: Option<String>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+
+// Actions / Workflows (REST) inputs/outputs
+#[derive(Debug, Deserialize)]
+pub struct ListWorkflowsInput { pub owner: String, pub repo: String, pub page: Option<u32>, pub per_page: Option<u32> }
+#[derive(Debug, Serialize)]
+pub struct WorkflowItem { pub id: i64, pub name: String, pub path: String, pub state: String }
+#[derive(Debug, Serialize)]
+pub struct ListWorkflowsOutput { pub items: Option<Vec<WorkflowItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+
+#[derive(Debug, Deserialize)]
+pub struct ListWorkflowRunsInput { pub owner: String, pub repo: String, pub page: Option<u32>, pub per_page: Option<u32> }
+#[derive(Debug, Serialize)]
+pub struct WorkflowRunItem { pub id: i64, pub run_number: i64, pub event: String, pub status: String, pub conclusion: Option<String>, pub head_sha: String, pub created_at: String, pub updated_at: String }
+#[derive(Debug, Serialize)]
+pub struct ListWorkflowRunsOutput { pub items: Option<Vec<WorkflowRunItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+
+#[derive(Debug, Deserialize)]
+pub struct GetWorkflowRunInput { pub owner: String, pub repo: String, pub run_id: i64, pub exclude_pull_requests: Option<bool> }
+#[derive(Debug, Serialize)]
+pub struct GetWorkflowRunOutput { pub item: Option<WorkflowRunItem>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+
+#[derive(Debug, Deserialize)]
+pub struct ListWorkflowJobsInput { pub owner: String, pub repo: String, pub run_id: i64, pub filter: Option<String>, pub page: Option<u32>, pub per_page: Option<u32> }
+#[derive(Debug, Serialize)]
+pub struct WorkflowJobItem { pub id: i64, pub name: String, pub status: String, pub conclusion: Option<String>, pub started_at: Option<String>, pub completed_at: Option<String> }
+#[derive(Debug, Serialize)]
+pub struct ListWorkflowJobsOutput { pub items: Option<Vec<WorkflowJobItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+
+#[derive(Debug, Deserialize)]
+pub struct GetJobLogsInput { pub owner: String, pub repo: String, pub job_id: i64, pub tail_lines: Option<usize>, pub include_timestamps: Option<bool> }
+#[derive(Debug, Serialize)]
+pub struct GetJobLogsOutput { pub logs: Option<String>, pub truncated: bool, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+
+#[derive(Debug, Deserialize)]
+pub struct RunIdInput { pub owner: String, pub repo: String, pub run_id: i64 }
+#[derive(Debug, Serialize)]
+pub struct OkOutput { pub ok: bool, #[serde(skip_serializing_if = "Option::is_none")] pub queued_run_id: Option<i64>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
