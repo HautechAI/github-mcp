@@ -44,15 +44,32 @@ struct RpcError {
 }
 
 fn rpc_error(id: Option<Id>, code: i64, message: &str, data: Option<Value>) -> Response {
-    Response { jsonrpc: "2.0".into(), result: None, error: Some(RpcError { code, message: message.into(), data }), id }
+    Response {
+        jsonrpc: "2.0".into(),
+        result: None,
+        error: Some(RpcError {
+            code,
+            message: message.into(),
+            data,
+        }),
+        id,
+    }
 }
 
 fn rpc_ok(id: Option<Id>, result: Value) -> Response {
-    Response { jsonrpc: "2.0".into(), result: Some(result), error: None, id }
+    Response {
+        jsonrpc: "2.0".into(),
+        result: Some(result),
+        error: None,
+        id,
+    }
 }
 
 pub fn run_stdio_server() -> anyhow::Result<()> {
-    info!("Starting github-mcp stdio server; protocol={}", PROTOCOL_VERSION);
+    info!(
+        "Starting github-mcp stdio server; protocol={}",
+        PROTOCOL_VERSION
+    );
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
     // Note: for milestone 1, we accept a single request for simplicity; future work can stream.
@@ -87,7 +104,12 @@ fn dispatch(req: Request) -> Response {
         "tools/list" => handle_tools_list(req.id),
         "tools/call" => handle_tools_call(req.id, req.params),
         "ping" => handle_ping(req.id, req.params),
-        other => rpc_error(req.id, -32601, &format!("Method not found: {}", other), None),
+        other => rpc_error(
+            req.id,
+            -32601,
+            &format!("Method not found: {}", other),
+            None,
+        ),
     }
 }
 
@@ -162,7 +184,9 @@ fn handle_ping(id: Option<Id>, params: Value) -> Response {
 
 fn enforce_limit(limit: Option<u32>) -> Result<u32, String> {
     let l = limit.unwrap_or(30);
-    if l == 0 || l > 100 { return Err("limit must be 1..=100".into()); }
+    if l == 0 || l > 100 {
+        return Err("limit must be 1..=100".into());
+    }
     Ok(l)
 }
 
@@ -177,9 +201,17 @@ struct ListIssuesVars {
 }
 
 fn handle_list_issues(id: Option<Id>, params: Value) -> Response {
-    let input: ListIssuesInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let Ok(limit) = enforce_limit(input.limit) else { return rpc_error(id, -32602, "Invalid limit (1..=100)", None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: ListIssuesInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let Ok(limit) = enforce_limit(input.limit) else {
+        return rpc_error(id, -32602, "Invalid limit (1..=100)", None);
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
         let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
@@ -237,136 +269,590 @@ fn handle_list_issues(id: Option<Id>, params: Value) -> Response {
         let meta = Meta { next_cursor: repo.issues.pageInfo.endCursor, has_more: repo.issues.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
     });
-    let out = ListIssuesOutput { items, meta, error: err };
+    let out = ListIssuesOutput {
+        items,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
-fn parse_page_cursor(cursor: Option<String>, page: Option<u32>, per_page: Option<u32>) -> (u32, u32, Option<String>) {
-    if let Some(c) = cursor { if let Some(decoded) = http::decode_rest_cursor(&c) { return (decoded.page, decoded.per_page, Some(c)); } }
+fn parse_page_cursor(
+    cursor: Option<String>,
+    page: Option<u32>,
+    per_page: Option<u32>,
+) -> (u32, u32, Option<String>) {
+    if let Some(c) = cursor {
+        if let Some(decoded) = http::decode_rest_cursor(&c) {
+            return (decoded.page, decoded.per_page, Some(c));
+        }
+    }
     (page.unwrap_or(1), per_page.unwrap_or(30).min(100), None)
 }
 
 fn handle_list_workflows(id: Option<Id>, params: Value) -> Response {
-    let input: ListWorkflowsInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: ListWorkflowsInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
         let (page, per_page, _cur) = parse_page_cursor(None, input.page, input.per_page);
-        let path = format!("/repos/{}/{}/actions/workflows?per_page={}&page={}", input.owner, input.repo, per_page, page);
-        #[derive(Deserialize)] struct Workflows { workflows: Vec<Workflow>, total_count: i64 }
-        #[derive(Deserialize)] struct Workflow { id: i64, name: String, path: String, state: String }
+        let path = format!(
+            "/repos/{}/{}/actions/workflows?per_page={}&page={}",
+            input.owner, input.repo, per_page, page
+        );
+        #[derive(Deserialize)]
+        struct Workflows {
+            workflows: Vec<Workflow>,
+            total_count: i64,
+        }
+        #[derive(Deserialize)]
+        struct Workflow {
+            id: i64,
+            name: String,
+            path: String,
+            state: String,
+        }
         let resp = http::rest_get_json::<Workflows>(&client, &cfg, &path).await;
-        if let Some(err) = resp.error { return (None, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
         let rate = resp.meta.rate;
-        let items = resp.value.map(|v| v.workflows.into_iter().map(|w| WorkflowItem{ id: w.id, name: w.name, path: w.path, state: w.state }).collect());
-        let has_more = resp.headers.as_ref().map(|h| http::has_next_page_from_link(h)).unwrap_or(false);
-        let next_cursor = if has_more { Some(http::encode_rest_cursor(http::RestCursor{ page: page+1, per_page })) } else { None };
-        (items, Meta{ next_cursor, has_more, rate }, None)
+        let items = resp.value.map(|v| {
+            v.workflows
+                .into_iter()
+                .map(|w| WorkflowItem {
+                    id: w.id,
+                    name: w.name,
+                    path: w.path,
+                    state: w.state,
+                })
+                .collect()
+        });
+        let has_more = resp
+            .headers
+            .as_ref()
+            .map(|h| http::has_next_page_from_link(h))
+            .unwrap_or(false);
+        let next_cursor = if has_more {
+            Some(http::encode_rest_cursor(http::RestCursor {
+                page: page + 1,
+                per_page,
+            }))
+        } else {
+            None
+        };
+        (
+            items,
+            Meta {
+                next_cursor,
+                has_more,
+                rate,
+            },
+            None,
+        )
     });
-    let out = ListWorkflowsOutput { items, meta, error: err };
+    let out = ListWorkflowsOutput {
+        items,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_list_workflow_runs(id: Option<Id>, params: Value) -> Response {
-    let input: ListWorkflowRunsInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: ListWorkflowRunsInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
         let (page, per_page, _cur) = parse_page_cursor(None, input.page, input.per_page);
-        let path = format!("/repos/{}/{}/actions/runs?per_page={}&page={}", input.owner, input.repo, per_page, page);
-        #[derive(Deserialize)] struct Runs { workflow_runs: Vec<Run> }
-        #[derive(Deserialize)] struct Run { id: i64, run_number: i64, event: String, status: String, conclusion: Option<String>, head_sha: String, created_at: String, updated_at: String }
+        let path = format!(
+            "/repos/{}/{}/actions/runs?per_page={}&page={}",
+            input.owner, input.repo, per_page, page
+        );
+        #[derive(Deserialize)]
+        struct Runs {
+            workflow_runs: Vec<Run>,
+        }
+        #[derive(Deserialize)]
+        struct Run {
+            id: i64,
+            run_number: i64,
+            event: String,
+            status: String,
+            conclusion: Option<String>,
+            head_sha: String,
+            created_at: String,
+            updated_at: String,
+        }
         let resp = http::rest_get_json::<Runs>(&client, &cfg, &path).await;
-        if let Some(err) = resp.error { return (None, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
         let rate = resp.meta.rate;
-        let items = resp.value.map(|v| v.workflow_runs.into_iter().map(|r| WorkflowRunItem{ id: r.id, run_number: r.run_number, event: r.event, status: r.status, conclusion: r.conclusion, head_sha: r.head_sha, created_at: r.created_at, updated_at: r.updated_at }).collect());
-        let has_more = resp.headers.as_ref().map(|h| http::has_next_page_from_link(h)).unwrap_or(false);
-        let next_cursor = if has_more { Some(http::encode_rest_cursor(http::RestCursor{ page: page+1, per_page })) } else { None };
-        (items, Meta{ next_cursor, has_more, rate }, None)
+        let items = resp.value.map(|v| {
+            v.workflow_runs
+                .into_iter()
+                .map(|r| WorkflowRunItem {
+                    id: r.id,
+                    run_number: r.run_number,
+                    event: r.event,
+                    status: r.status,
+                    conclusion: r.conclusion,
+                    head_sha: r.head_sha,
+                    created_at: r.created_at,
+                    updated_at: r.updated_at,
+                })
+                .collect()
+        });
+        let has_more = resp
+            .headers
+            .as_ref()
+            .map(|h| http::has_next_page_from_link(h))
+            .unwrap_or(false);
+        let next_cursor = if has_more {
+            Some(http::encode_rest_cursor(http::RestCursor {
+                page: page + 1,
+                per_page,
+            }))
+        } else {
+            None
+        };
+        (
+            items,
+            Meta {
+                next_cursor,
+                has_more,
+                rate,
+            },
+            None,
+        )
     });
-    let out = ListWorkflowRunsOutput { items, meta, error: err };
+    let out = ListWorkflowRunsOutput {
+        items,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_get_workflow_run(id: Option<Id>, params: Value) -> Response {
-    let input: GetWorkflowRunInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: GetWorkflowRunInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (item, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
         let exclude = input.exclude_pull_requests.unwrap_or(false);
-        let path = format!("/repos/{}/{}/actions/runs/{}{}", input.owner, input.repo, input.run_id, if exclude { "?exclude_pull_requests=true" } else { "" });
-        #[derive(Deserialize)] struct Run { id: i64, run_number: i64, event: String, status: String, conclusion: Option<String>, head_sha: String, created_at: String, updated_at: String }
+        let path = format!(
+            "/repos/{}/{}/actions/runs/{}{}",
+            input.owner,
+            input.repo,
+            input.run_id,
+            if exclude {
+                "?exclude_pull_requests=true"
+            } else {
+                ""
+            }
+        );
+        #[derive(Deserialize)]
+        struct Run {
+            id: i64,
+            run_number: i64,
+            event: String,
+            status: String,
+            conclusion: Option<String>,
+            head_sha: String,
+            created_at: String,
+            updated_at: String,
+        }
         let resp = http::rest_get_json::<Run>(&client, &cfg, &path).await;
-        if let Some(err) = resp.error { return (None, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
         let rate = resp.meta.rate;
         let r = resp.value.unwrap();
-        let item = WorkflowRunItem { id: r.id, run_number: r.run_number, event: r.event, status: r.status, conclusion: r.conclusion, head_sha: r.head_sha, created_at: r.created_at, updated_at: r.updated_at };
-        (Some(item), Meta{ next_cursor: None, has_more: false, rate }, None)
+        let item = WorkflowRunItem {
+            id: r.id,
+            run_number: r.run_number,
+            event: r.event,
+            status: r.status,
+            conclusion: r.conclusion,
+            head_sha: r.head_sha,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        };
+        (
+            Some(item),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate,
+            },
+            None,
+        )
     });
-    let out = GetWorkflowRunOutput { item, meta, error: err };
+    let out = GetWorkflowRunOutput {
+        item,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_list_workflow_jobs(id: Option<Id>, params: Value) -> Response {
-    let input: ListWorkflowJobsInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: ListWorkflowJobsInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
         let (page, per_page, _cur) = parse_page_cursor(None, input.page, input.per_page);
         let filter = input.filter.unwrap_or_else(|| "all".into());
-        let path = format!("/repos/{}/{}/actions/runs/{}/jobs?filter={}&per_page={}&page={}", input.owner, input.repo, input.run_id, filter, per_page, page);
-        #[derive(Deserialize)] struct Job { id: i64, name: String, status: String, conclusion: Option<String>, started_at: Option<String>, completed_at: Option<String> }
-        #[derive(Deserialize)] struct Jobs { jobs: Vec<Job> }
+        let path = format!(
+            "/repos/{}/{}/actions/runs/{}/jobs?filter={}&per_page={}&page={}",
+            input.owner, input.repo, input.run_id, filter, per_page, page
+        );
+        #[derive(Deserialize)]
+        struct Job {
+            id: i64,
+            name: String,
+            status: String,
+            conclusion: Option<String>,
+            started_at: Option<String>,
+            completed_at: Option<String>,
+        }
+        #[derive(Deserialize)]
+        struct Jobs {
+            jobs: Vec<Job>,
+        }
         let resp = http::rest_get_json::<Jobs>(&client, &cfg, &path).await;
-        if let Some(err) = resp.error { return (None, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
         let rate = resp.meta.rate;
-        let items = resp.value.map(|v| v.jobs.into_iter().map(|j| WorkflowJobItem{ id: j.id, name: j.name, status: j.status, conclusion: j.conclusion, started_at: j.started_at, completed_at: j.completed_at }).collect());
-        let has_more = resp.headers.as_ref().map(|h| http::has_next_page_from_link(h)).unwrap_or(false);
-        let next_cursor = if has_more { Some(http::encode_rest_cursor(http::RestCursor{ page: page+1, per_page })) } else { None };
-        (items, Meta{ next_cursor, has_more, rate }, None)
+        let items = resp.value.map(|v| {
+            v.jobs
+                .into_iter()
+                .map(|j| WorkflowJobItem {
+                    id: j.id,
+                    name: j.name,
+                    status: j.status,
+                    conclusion: j.conclusion,
+                    started_at: j.started_at,
+                    completed_at: j.completed_at,
+                })
+                .collect()
+        });
+        let has_more = resp
+            .headers
+            .as_ref()
+            .map(|h| http::has_next_page_from_link(h))
+            .unwrap_or(false);
+        let next_cursor = if has_more {
+            Some(http::encode_rest_cursor(http::RestCursor {
+                page: page + 1,
+                per_page,
+            }))
+        } else {
+            None
+        };
+        (
+            items,
+            Meta {
+                next_cursor,
+                has_more,
+                rate,
+            },
+            None,
+        )
     });
-    let out = ListWorkflowJobsOutput { items, meta, error: err };
+    let out = ListWorkflowJobsOutput {
+        items,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_get_workflow_job_logs(id: Option<Id>, params: Value) -> Response {
     use reqwest::StatusCode;
-    let input: GetJobLogsInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: GetJobLogsInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (logs, truncated, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, false, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    false,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
         // Step 1: call the GitHub logs endpoint, expecting 302 to ZIP
-        let path = format!("/repos/{}/{}/actions/jobs/{}/logs", input.owner, input.repo, input.job_id);
+        let path = format!(
+            "/repos/{}/{}/actions/jobs/{}/logs",
+            input.owner, input.repo, input.job_id
+        );
         let url = format!("{}{}", cfg.api_url, path);
         let res = client
             .get(&url)
             .header("X-GitHub-Api-Version", &cfg.api_version)
             .send()
             .await;
-        let res = match res { Ok(r) => r, Err(e) => return (None, false, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "upstream_error".into(), message: e.to_string(), retriable: true })) };
+        let res = match res {
+            Ok(r) => r,
+            Err(e) => {
+                return (
+                    None,
+                    false,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "upstream_error".into(),
+                        message: e.to_string(),
+                        retriable: true,
+                    }),
+                )
+            }
+        };
         let status = res.status();
         // If GitHub returns 302, follow Location
-        if status == StatusCode::FOUND || status == StatusCode::MOVED_PERMANENTLY || status == StatusCode::TEMPORARY_REDIRECT || status == StatusCode::PERMANENT_REDIRECT {
-            let location = res.headers().get("location").and_then(|v| v.to_str().ok()).map(|s| s.to_string());
-            if location.is_none() { return (None, false, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "upstream_error".into(), message: "Missing Location for logs redirect".into(), retriable: true })) }
+        if status == StatusCode::FOUND
+            || status == StatusCode::MOVED_PERMANENTLY
+            || status == StatusCode::TEMPORARY_REDIRECT
+            || status == StatusCode::PERMANENT_REDIRECT
+        {
+            let location = res
+                .headers()
+                .get("location")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string());
+            if location.is_none() {
+                return (
+                    None,
+                    false,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "upstream_error".into(),
+                        message: "Missing Location for logs redirect".into(),
+                        retriable: true,
+                    }),
+                );
+            }
             let loc = location.unwrap();
-            let bin = match client.get(loc).send().await { Ok(r) => r.bytes().await.ok(), Err(_) => None };
-            if bin.is_none() { return (None, false, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "upstream_error".into(), message: "Failed to download logs ZIP".into(), retriable: true })) }
+            let bin = match client.get(loc).send().await {
+                Ok(r) => r.bytes().await.ok(),
+                Err(_) => None,
+            };
+            if bin.is_none() {
+                return (
+                    None,
+                    false,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "upstream_error".into(),
+                        message: "Failed to download logs ZIP".into(),
+                        retriable: true,
+                    }),
+                );
+            }
             let bytes = bin.unwrap();
             // unzip and aggregate .txt files
             let mut cursor = std::io::Cursor::new(bytes);
-            let mut z = zip::ZipArchive::new(&mut cursor).map_err(|e| e.to_string()).ok();
-            if z.is_none() { return (None, false, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: "Invalid ZIP".into(), retriable: false })) }
+            let mut z = zip::ZipArchive::new(&mut cursor)
+                .map_err(|e| e.to_string())
+                .ok();
+            if z.is_none() {
+                return (
+                    None,
+                    false,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: "Invalid ZIP".into(),
+                        retriable: false,
+                    }),
+                );
+            }
             let mut z = z.unwrap();
             let mut lines: Vec<String> = Vec::new();
             for i in 0..z.len() {
                 let mut file = z.by_index(i).unwrap();
-                if !file.name().ends_with(".txt") { continue; }
+                if !file.name().ends_with(".txt") {
+                    continue;
+                }
                 use std::io::Read;
                 let mut buf = String::new();
                 let _ = file.read_to_string(&mut buf);
@@ -376,79 +862,373 @@ fn handle_get_workflow_job_logs(id: Option<Id>, params: Value) -> Response {
             }
             let total = lines.len();
             let mut truncated = false;
-            if let Some(tail) = input.tail_lines { if tail < total { truncated = true; lines = lines.split_off(total - tail); } }
+            if let Some(tail) = input.tail_lines {
+                if tail < total {
+                    truncated = true;
+                    lines = lines.split_off(total - tail);
+                }
+            }
             if input.include_timestamps.unwrap_or(false) {
                 let now = chrono::Utc::now().to_rfc3339();
-                lines = lines.into_iter().map(|l| format!("{} {}", now, l)).collect();
+                lines = lines
+                    .into_iter()
+                    .map(|l| format!("{} {}", now, l))
+                    .collect();
             }
             let aggregated = lines.join("\n");
-            return (Some(aggregated), truncated, Meta{ next_cursor: None, has_more: false, rate: None }, None);
+            return (
+                Some(aggregated),
+                truncated,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: None,
+                },
+                None,
+            );
         } else if status.is_success() {
             // Some GH instances may return raw text; handle gracefully
             let text = res.text().await.unwrap_or_default();
-            return (Some(text), false, Meta{ next_cursor: None, has_more: false, rate: None }, None);
+            return (
+                Some(text),
+                false,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: None,
+                },
+                None,
+            );
         } else {
             let body = res.text().await.unwrap_or_default();
             let err = http::map_status_to_error(status, body);
-            return (None, false, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable }));
+            return (
+                None,
+                false,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: None,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
         }
     });
-    let out = GetJobLogsOutput { logs, truncated, meta, error: err };
+    let out = GetJobLogsOutput {
+        logs,
+        truncated,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_rerun_workflow_run(id: Option<Id>, params: Value) -> Response {
-    let input: RunIdInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: RunIdInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (ok, queued, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (false, None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
-        let path = format!("/repos/{}/{}/actions/runs/{}/rerun", input.owner, input.repo, input.run_id);
-        let resp = client.post(format!("{}{}", cfg.api_url, path)).header("X-GitHub-Api-Version", &cfg.api_version).send().await;
-        let resp = match resp { Ok(r) => r, Err(e) => return (false, None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "upstream_error".into(), message: e.to_string(), retriable: true })) };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    false,
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        let path = format!(
+            "/repos/{}/{}/actions/runs/{}/rerun",
+            input.owner, input.repo, input.run_id
+        );
+        let resp = client
+            .post(format!("{}{}", cfg.api_url, path))
+            .header("X-GitHub-Api-Version", &cfg.api_version)
+            .send()
+            .await;
+        let resp = match resp {
+            Ok(r) => r,
+            Err(e) => {
+                return (
+                    false,
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "upstream_error".into(),
+                        message: e.to_string(),
+                        retriable: true,
+                    }),
+                )
+            }
+        };
         let status = resp.status();
-        if status.is_success() || status == reqwest::StatusCode::ACCEPTED { (true, None, Meta{ next_cursor: None, has_more: false, rate: None }, None) } else { let body = resp.text().await.unwrap_or_default(); let err = http::map_status_to_error(status, body); (false, None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
+        if status.is_success() || status == reqwest::StatusCode::ACCEPTED {
+            (
+                true,
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: None,
+                },
+                None,
+            )
+        } else {
+            let body = resp.text().await.unwrap_or_default();
+            let err = http::map_status_to_error(status, body);
+            (
+                false,
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: None,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            )
+        }
     });
-    let out = OkOutput { ok, queued_run_id: queued, meta, error: err };
+    let out = OkOutput {
+        ok,
+        queued_run_id: queued,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_rerun_workflow_run_failed(id: Option<Id>, params: Value) -> Response {
-    let input: RunIdInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: RunIdInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (ok, queued, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (false, None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
-        let path = format!("/repos/{}/{}/actions/runs/{}/rerun-failed-jobs", input.owner, input.repo, input.run_id);
-        let resp = client.post(format!("{}{}", cfg.api_url, path)).header("X-GitHub-Api-Version", &cfg.api_version).send().await;
-        let resp = match resp { Ok(r) => r, Err(e) => return (false, None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "upstream_error".into(), message: e.to_string(), retriable: true })) };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    false,
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        let path = format!(
+            "/repos/{}/{}/actions/runs/{}/rerun-failed-jobs",
+            input.owner, input.repo, input.run_id
+        );
+        let resp = client
+            .post(format!("{}{}", cfg.api_url, path))
+            .header("X-GitHub-Api-Version", &cfg.api_version)
+            .send()
+            .await;
+        let resp = match resp {
+            Ok(r) => r,
+            Err(e) => {
+                return (
+                    false,
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "upstream_error".into(),
+                        message: e.to_string(),
+                        retriable: true,
+                    }),
+                )
+            }
+        };
         let status = resp.status();
-        if status.is_success() || status == reqwest::StatusCode::ACCEPTED { (true, None, Meta{ next_cursor: None, has_more: false, rate: None }, None) } else { let body = resp.text().await.unwrap_or_default(); let err = http::map_status_to_error(status, body); (false, None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
+        if status.is_success() || status == reqwest::StatusCode::ACCEPTED {
+            (
+                true,
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: None,
+                },
+                None,
+            )
+        } else {
+            let body = resp.text().await.unwrap_or_default();
+            let err = http::map_status_to_error(status, body);
+            (
+                false,
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: None,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            )
+        }
     });
-    let out = OkOutput { ok, queued_run_id: queued, meta, error: err };
+    let out = OkOutput {
+        ok,
+        queued_run_id: queued,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_cancel_workflow_run(id: Option<Id>, params: Value) -> Response {
-    let input: RunIdInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: RunIdInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (ok, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (false, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
-        let path = format!("/repos/{}/{}/actions/runs/{}/cancel", input.owner, input.repo, input.run_id);
-        let resp = client.post(format!("{}{}", cfg.api_url, path)).header("X-GitHub-Api-Version", &cfg.api_version).send().await;
-        let resp = match resp { Ok(r) => r, Err(e) => return (false, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "upstream_error".into(), message: e.to_string(), retriable: true })) };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    false,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        let path = format!(
+            "/repos/{}/{}/actions/runs/{}/cancel",
+            input.owner, input.repo, input.run_id
+        );
+        let resp = client
+            .post(format!("{}{}", cfg.api_url, path))
+            .header("X-GitHub-Api-Version", &cfg.api_version)
+            .send()
+            .await;
+        let resp = match resp {
+            Ok(r) => r,
+            Err(e) => {
+                return (
+                    false,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "upstream_error".into(),
+                        message: e.to_string(),
+                        retriable: true,
+                    }),
+                )
+            }
+        };
         let status = resp.status();
-        if status.is_success() || status == reqwest::StatusCode::ACCEPTED { (true, Meta{ next_cursor: None, has_more: false, rate: None }, None) } else { let body = resp.text().await.unwrap_or_default(); let err = http::map_status_to_error(status, body); (false, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
+        if status.is_success() || status == reqwest::StatusCode::ACCEPTED {
+            (
+                true,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: None,
+                },
+                None,
+            )
+        } else {
+            let body = resp.text().await.unwrap_or_default();
+            let err = http::map_status_to_error(status, body);
+            (
+                false,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: None,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            )
+        }
     });
-    let out = OkOutput { ok, queued_run_id: None, meta, error: err };
+    let out = OkOutput {
+        ok,
+        queued_run_id: None,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_list_pr_comments(id: Option<Id>, params: Value) -> Response {
-    let input: ListPrCommentsInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let Ok(limit) = enforce_limit(input.limit) else { return rpc_error(id, -32602, "Invalid limit (1..=100)", None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: ListPrCommentsInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let Ok(limit) = enforce_limit(input.limit) else {
+        return rpc_error(id, -32602, "Invalid limit (1..=100)", None);
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
         let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
@@ -483,16 +1263,30 @@ fn handle_list_pr_comments(id: Option<Id>, params: Value) -> Response {
         let meta = Meta { next_cursor: pr.comments.pageInfo.endCursor, has_more: pr.comments.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
     });
-    let out = ListPrCommentsOutput { items, meta, error: err };
+    let out = ListPrCommentsOutput {
+        items,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
-fn map_side(s: Option<String>) -> Option<String> { s.map(|x| x.to_uppercase()) }
+fn map_side(s: Option<String>) -> Option<String> {
+    s.map(|x| x.to_uppercase())
+}
 
 fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
-    let input: ListPrReviewCommentsInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let Ok(limit) = enforce_limit(input.limit) else { return rpc_error(id, -32602, "Invalid limit (1..=100)", None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: ListPrReviewCommentsInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let Ok(limit) = enforce_limit(input.limit) else {
+        return rpc_error(id, -32602, "Invalid limit (1..=100)", None);
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
         let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
@@ -545,14 +1339,26 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
         let meta = Meta { next_cursor: pr.reviewComments.pageInfo.endCursor, has_more: pr.reviewComments.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
     });
-    let out = ListPrReviewCommentsOutput { items, meta, error: err };
+    let out = ListPrReviewCommentsOutput {
+        items,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_list_pr_review_threads(id: Option<Id>, params: Value) -> Response {
-    let input: ListPrReviewThreadsInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let Ok(limit) = enforce_limit(input.limit) else { return rpc_error(id, -32602, "Invalid limit (1..=100)", None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: ListPrReviewThreadsInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let Ok(limit) = enforce_limit(input.limit) else {
+        return rpc_error(id, -32602, "Invalid limit (1..=100)", None);
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
         let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
@@ -600,62 +1406,214 @@ fn handle_list_pr_review_threads(id: Option<Id>, params: Value) -> Response {
         let meta = Meta { next_cursor: pr.reviewThreads.pageInfo.endCursor, has_more: pr.reviewThreads.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
     });
-    let out = ListPrReviewThreadsOutput { items, meta, error: err };
+    let out = ListPrReviewThreadsOutput {
+        items,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_resolve_pr_review_thread(id: Option<Id>, params: Value) -> Response {
-    let input: ResolveThreadInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: ResolveThreadInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (ok, meta, err, is_resolved) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (false, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false }), false) };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    false,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                    false,
+                )
+            }
+        };
         let query = r#"
         mutation ResolvePrReviewThread($thread_id: ID!) {
           resolveReviewThread(input: { threadId: $thread_id }) { thread { id isResolved } }
         }
         "#;
-        #[derive(Deserialize)] struct Thread { id: String, isResolved: bool }
-        #[derive(Deserialize)] struct Resp { resolveReviewThread: Option<Resolved> }
-        #[derive(Deserialize)] struct Resolved { thread: Thread }
+        #[derive(Deserialize)]
+        struct Thread {
+            id: String,
+            isResolved: bool,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            resolveReviewThread: Option<Resolved>,
+        }
+        #[derive(Deserialize)]
+        struct Resolved {
+            thread: Thread,
+        }
         let vars = serde_json::json!({ "thread_id": input.thread_id });
-        let (data, _meta, err) = http::graphql_post::<serde_json::Value, Resp, serde_json::Value>(&client, &cfg, query, &vars).await;
-        if let Some(e) = err { return (false, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable }), false) }
-        let is_resolved = data.and_then(|d| d.resolveReviewThread).map(|x| x.thread.isResolved).unwrap_or(false);
-        (true, Meta{ next_cursor: None, has_more: false, rate: None }, None, is_resolved)
+        let (data, _meta, err) = http::graphql_post::<serde_json::Value, Resp, serde_json::Value>(
+            &client, &cfg, query, &vars,
+        )
+        .await;
+        if let Some(e) = err {
+            return (
+                false,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: None,
+                },
+                Some(ErrorShape {
+                    code: e.code,
+                    message: e.message,
+                    retriable: e.retriable,
+                }),
+                false,
+            );
+        }
+        let is_resolved = data
+            .and_then(|d| d.resolveReviewThread)
+            .map(|x| x.thread.isResolved)
+            .unwrap_or(false);
+        (
+            true,
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: None,
+            },
+            None,
+            is_resolved,
+        )
     });
-    let out = ResolveThreadOutput { ok, thread_id: input.thread_id, is_resolved, meta, error: err };
+    let out = ResolveThreadOutput {
+        ok,
+        thread_id: input.thread_id,
+        is_resolved,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_unresolve_pr_review_thread(id: Option<Id>, params: Value) -> Response {
-    let input: ResolveThreadInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: ResolveThreadInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (ok, meta, err, is_resolved) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (false, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false }), false) };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    false,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                    false,
+                )
+            }
+        };
         let query = r#"
         mutation UnresolvePrReviewThread($thread_id: ID!) {
           unresolveReviewThread(input: { threadId: $thread_id }) { thread { id isResolved } }
         }
         "#;
-        #[derive(Deserialize)] struct Thread { id: String, isResolved: bool }
-        #[derive(Deserialize)] struct Resp { unresolveReviewThread: Option<Resolved> }
-        #[derive(Deserialize)] struct Resolved { thread: Thread }
+        #[derive(Deserialize)]
+        struct Thread {
+            id: String,
+            isResolved: bool,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            unresolveReviewThread: Option<Resolved>,
+        }
+        #[derive(Deserialize)]
+        struct Resolved {
+            thread: Thread,
+        }
         let vars = serde_json::json!({ "thread_id": input.thread_id });
-        let (data, _meta, err) = http::graphql_post::<serde_json::Value, Resp, serde_json::Value>(&client, &cfg, query, &vars).await;
-        if let Some(e) = err { return (false, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable }), false) }
-        let is_resolved = data.and_then(|d| d.unresolveReviewThread).map(|x| x.thread.isResolved).unwrap_or(false);
-        (true, Meta{ next_cursor: None, has_more: false, rate: None }, None, is_resolved)
+        let (data, _meta, err) = http::graphql_post::<serde_json::Value, Resp, serde_json::Value>(
+            &client, &cfg, query, &vars,
+        )
+        .await;
+        if let Some(e) = err {
+            return (
+                false,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: None,
+                },
+                Some(ErrorShape {
+                    code: e.code,
+                    message: e.message,
+                    retriable: e.retriable,
+                }),
+                false,
+            );
+        }
+        let is_resolved = data
+            .and_then(|d| d.unresolveReviewThread)
+            .map(|x| x.thread.isResolved)
+            .unwrap_or(false);
+        (
+            true,
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: None,
+            },
+            None,
+            is_resolved,
+        )
     });
-    let out = ResolveThreadOutput { ok, thread_id: input.thread_id, is_resolved, meta, error: err };
+    let out = ResolveThreadOutput {
+        ok,
+        thread_id: input.thread_id,
+        is_resolved,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_list_pr_reviews(id: Option<Id>, params: Value) -> Response {
-    let input: ListPrReviewsInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let Ok(limit) = enforce_limit(input.limit) else { return rpc_error(id, -32602, "Invalid limit (1..=100)", None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: ListPrReviewsInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let Ok(limit) = enforce_limit(input.limit) else {
+        return rpc_error(id, -32602, "Invalid limit (1..=100)", None);
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
         let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
@@ -689,14 +1647,26 @@ fn handle_list_pr_reviews(id: Option<Id>, params: Value) -> Response {
         let meta = Meta { next_cursor: pr.reviews.pageInfo.endCursor, has_more: pr.reviews.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
     });
-    let out = ListPrReviewsOutput { items, meta, error: err };
+    let out = ListPrReviewsOutput {
+        items,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_list_pr_commits(id: Option<Id>, params: Value) -> Response {
-    let input: ListPrCommitsInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let Ok(limit) = enforce_limit(input.limit) else { return rpc_error(id, -32602, "Invalid limit (1..=100)", None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: ListPrCommitsInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let Ok(limit) = enforce_limit(input.limit) else {
+        return rpc_error(id, -32602, "Invalid limit (1..=100)", None);
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
         let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
@@ -735,66 +1705,215 @@ fn handle_list_pr_commits(id: Option<Id>, params: Value) -> Response {
         let meta = Meta { next_cursor: pr.commits.pageInfo.endCursor, has_more: pr.commits.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
     });
-    let out = ListPrCommitsOutput { items, meta, error: err };
+    let out = ListPrCommitsOutput {
+        items,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_list_pr_files(id: Option<Id>, params: Value) -> Response {
-    let input: ListPrFilesInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: ListPrFilesInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
         // Map REST pagination inputs
         let page = input.page.unwrap_or(1);
         let per_page = input.per_page.unwrap_or(30).min(100);
-        let path = format!("/repos/{}/{}/pulls/{}/files?per_page={}&page={}", input.owner, input.repo, input.number, per_page, page);
-        #[derive(Deserialize)] struct File { filename: String, status: String, additions: i64, deletions: i64, changes: i64, sha: String, patch: Option<String> }
+        let path = format!(
+            "/repos/{}/{}/pulls/{}/files?per_page={}&page={}",
+            input.owner, input.repo, input.number, per_page, page
+        );
+        #[derive(Deserialize)]
+        struct File {
+            filename: String,
+            status: String,
+            additions: i64,
+            deletions: i64,
+            changes: i64,
+            sha: String,
+            patch: Option<String>,
+        }
         let resp = http::rest_get_json::<Vec<File>>(&client, &cfg, &path).await;
-        if let Some(err) = resp.error { return (None, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
         let rate = resp.meta.rate;
         let has_more = http::has_next_page_from_link(&HeaderMap::new()); // placeholder; http::rest_get_json does not return headers
-        let next_cursor = if has_more { Some(format!("page:{}", page + 1)) } else { None };
+        let next_cursor = if has_more {
+            Some(format!("page:{}", page + 1))
+        } else {
+            None
+        };
         let include_patch = input.include_patch.unwrap_or(false);
-        let items: Vec<PrFileItem> = resp.value.unwrap_or_default().into_iter().map(|f| PrFileItem{
-            filename: f.filename,
-            status: f.status,
-            additions: f.additions,
-            deletions: f.deletions,
-            changes: f.changes,
-            sha: f.sha,
-            patch: if include_patch { f.patch } else { None },
-        }).collect();
-        (Some(items), Meta{ next_cursor, has_more, rate }, None)
+        let items: Vec<PrFileItem> = resp
+            .value
+            .unwrap_or_default()
+            .into_iter()
+            .map(|f| PrFileItem {
+                filename: f.filename,
+                status: f.status,
+                additions: f.additions,
+                deletions: f.deletions,
+                changes: f.changes,
+                sha: f.sha,
+                patch: if include_patch { f.patch } else { None },
+            })
+            .collect();
+        (
+            Some(items),
+            Meta {
+                next_cursor,
+                has_more,
+                rate,
+            },
+            None,
+        )
     });
-    let out = ListPrFilesOutput { items, meta, error: err };
+    let out = ListPrFilesOutput {
+        items,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_get_pr_text(id: Option<Id>, params: Value, is_diff: bool) -> Response {
-    let input: GetPrTextInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: GetPrTextInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (text, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
-        let path = format!("/repos/{}/{}/pulls/{}", input.owner, input.repo, input.number);
-        let accept = if is_diff { "application/vnd.github.v3.diff" } else { "application/vnd.github.v3.patch" };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        let path = format!(
+            "/repos/{}/{}/pulls/{}",
+            input.owner, input.repo, input.number
+        );
+        let accept = if is_diff {
+            "application/vnd.github.v3.diff"
+        } else {
+            "application/vnd.github.v3.patch"
+        };
         let resp = http::rest_get_text_with_accept(&client, &cfg, &path, accept).await;
-        if let Some(err) = resp.error { return (None, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
-        (resp.value, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, None)
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        (
+            resp.value,
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
     });
     let out = if is_diff {
-        GetPrTextOutput { diff: text, patch: None, meta, error: err }
+        GetPrTextOutput {
+            diff: text,
+            patch: None,
+            meta,
+            error: err,
+        }
     } else {
-        GetPrTextOutput { diff: None, patch: text, meta, error: err }
+        GetPrTextOutput {
+            diff: None,
+            patch: text,
+            meta,
+            error: err,
+        }
     };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_get_pr_status_summary(id: Option<Id>, params: Value) -> Response {
-    #[derive(Deserialize)] struct Input { owner: String, repo: String, number: i64, include_failing_contexts: Option<bool>, limit_contexts: Option<u32> }
-    let input: Input = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    #[derive(Deserialize)]
+    struct Input {
+        owner: String,
+        repo: String,
+        number: i64,
+        include_failing_contexts: Option<bool>,
+        limit_contexts: Option<u32>,
+    }
+    let input: Input = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let limit_contexts = input.limit_contexts.unwrap_or(10).min(100) as i64;
     let include_failing = input.include_failing_contexts.unwrap_or(false);
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -840,13 +1959,24 @@ fn handle_get_pr_status_summary(id: Option<Id>, params: Value) -> Response {
         (Some(summary), Meta{ next_cursor: None, has_more: false, rate: None }, None)
     });
     let result = serde_json::to_value(summary).unwrap_or_else(|_| serde_json::json!({"overall_state":"SUCCESS","counts":{"success":0,"pending":0,"failure":0}}));
-    rpc_ok(id, serde_json::json!({"item": result, "meta": meta, "error": err}))
+    rpc_ok(
+        id,
+        serde_json::json!({"item": result, "meta": meta, "error": err}),
+    )
 }
 
 fn handle_list_pull_requests(id: Option<Id>, params: Value) -> Response {
-    let input: ListPullRequestsInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let Ok(limit) = enforce_limit(input.limit) else { return rpc_error(id, -32602, "Invalid limit (1..=100)", None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: ListPullRequestsInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let Ok(limit) = enforce_limit(input.limit) else {
+        return rpc_error(id, -32602, "Invalid limit (1..=100)", None);
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
         let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
@@ -891,13 +2021,23 @@ fn handle_list_pull_requests(id: Option<Id>, params: Value) -> Response {
         let meta = Meta { next_cursor: repo.pullRequests.pageInfo.endCursor, has_more: repo.pullRequests.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
     });
-    let out = ListPullRequestsOutput { items, meta, error: err };
+    let out = ListPullRequestsOutput {
+        items,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_get_pull_request(id: Option<Id>, params: Value) -> Response {
-    let input: GetPullRequestInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: GetPullRequestInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (item, meta, err) = rt.block_on(async move {
         let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
@@ -935,13 +2075,23 @@ fn handle_get_pull_request(id: Option<Id>, params: Value) -> Response {
         };
         (Some(item), Meta{ next_cursor: None, has_more: false, rate: gql_meta.rate }, None)
     });
-    let out = GetPullRequestOutput { item, meta, error: err };
+    let out = GetPullRequestOutput {
+        item,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_get_issue(id: Option<Id>, params: Value) -> Response {
-    let input: GetIssueInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: GetIssueInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (item, meta, err) = rt.block_on(async move {
         let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
@@ -975,14 +2125,26 @@ fn handle_get_issue(id: Option<Id>, params: Value) -> Response {
         };
         (Some(item), Meta{ next_cursor: None, has_more: false, rate: None }, None)
     });
-    let out = GetIssueOutput { item, meta, error: err };
+    let out = GetIssueOutput {
+        item,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }
 
 fn handle_list_issue_comments(id: Option<Id>, params: Value) -> Response {
-    let input: ListIssueCommentsInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let Ok(limit) = enforce_limit(input.limit) else { return rpc_error(id, -32602, "Invalid limit (1..=100)", None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: ListIssueCommentsInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let Ok(limit) = enforce_limit(input.limit) else {
+        return rpc_error(id, -32602, "Invalid limit (1..=100)", None);
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
         let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
@@ -1018,6 +2180,10 @@ fn handle_list_issue_comments(id: Option<Id>, params: Value) -> Response {
         let meta = Meta { next_cursor: issue.comments.pageInfo.endCursor, has_more: issue.comments.pageInfo.hasNextPage, rate: None };
         (Some(items), meta, None)
     });
-    let out = ListIssueCommentsOutput { items, meta, error: err };
+    let out = ListIssueCommentsOutput {
+        items,
+        meta,
+        error: err,
+    };
     rpc_ok(id, serde_json::to_value(out).unwrap())
 }

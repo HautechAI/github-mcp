@@ -234,13 +234,25 @@ pub struct PingOutput {
 
 // Shared result meta and error shapes used across tools.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub struct RateMeta { pub remaining: Option<i32>, pub used: Option<i32>, pub reset_at: Option<String> }
+pub struct RateMeta {
+    pub remaining: Option<i32>,
+    pub used: Option<i32>,
+    pub reset_at: Option<String>,
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub struct Meta { pub next_cursor: Option<String>, pub has_more: bool, pub rate: Option<RateMeta> }
+pub struct Meta {
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
+    pub rate: Option<RateMeta>,
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub struct ErrorShape { pub code: String, pub message: String, pub retriable: bool }
+pub struct ErrorShape {
+    pub code: String,
+    pub message: String,
+    pub retriable: bool,
+}
 
 // Issues tool inputs
 #[derive(Debug, Deserialize)]
@@ -268,94 +280,230 @@ pub struct ListIssuesOutputItem {
     pub state: String,
     pub created_at: String,
     pub updated_at: String,
-    #[serde(skip_serializing_if = "Option::is_none")] pub author_login: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_login: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct ListIssuesOutput { pub items: Option<Vec<ListIssuesOutputItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct ListIssuesOutput {
+    pub items: Option<Vec<ListIssuesOutputItem>>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 #[derive(Debug, Deserialize)]
-pub struct GetIssueInput { pub owner: String, pub repo: String, pub number: i64, pub include_author: Option<bool> }
+pub struct GetIssueInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    pub include_author: Option<bool>,
+}
 
 #[derive(Debug, Serialize)]
 pub struct GetIssueOutputItem {
     pub id: String,
     pub number: i64,
     pub title: String,
-    #[serde(skip_serializing_if = "Option::is_none")] pub body: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
     pub state: String,
     pub created_at: String,
     pub updated_at: String,
-    #[serde(skip_serializing_if = "Option::is_none")] pub author_login: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_login: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct GetIssueOutput { pub item: Option<GetIssueOutputItem>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct GetIssueOutput {
+    pub item: Option<GetIssueOutputItem>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 #[derive(Debug, Deserialize)]
-pub struct ListIssueCommentsInput { pub owner: String, pub repo: String, pub number: i64, pub cursor: Option<String>, pub limit: Option<u32>, pub include_author: Option<bool> }
+pub struct ListIssueCommentsInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    pub cursor: Option<String>,
+    pub limit: Option<u32>,
+    pub include_author: Option<bool>,
+}
 
 #[derive(Debug, Serialize)]
-pub struct ListIssueCommentsItem { pub id: String, pub body: String, #[serde(skip_serializing_if = "Option::is_none")] pub author_login: Option<String>, pub created_at: String, pub updated_at: String }
+pub struct ListIssueCommentsItem {
+    pub id: String,
+    pub body: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_login: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
 
 #[derive(Debug, Serialize)]
-pub struct ListIssueCommentsOutput { pub items: Option<Vec<ListIssueCommentsItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct ListIssueCommentsOutput {
+    pub items: Option<Vec<ListIssueCommentsItem>>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 // PR inputs/outputs
 #[derive(Debug, Deserialize)]
-pub struct ListPullRequestsInput { pub owner: String, pub repo: String, pub state: Option<String>, pub base: Option<String>, pub head: Option<String>, pub cursor: Option<String>, pub limit: Option<u32>, pub include_author: Option<bool> }
+pub struct ListPullRequestsInput {
+    pub owner: String,
+    pub repo: String,
+    pub state: Option<String>,
+    pub base: Option<String>,
+    pub head: Option<String>,
+    pub cursor: Option<String>,
+    pub limit: Option<u32>,
+    pub include_author: Option<bool>,
+}
 
 #[derive(Debug, Serialize)]
-pub struct ListPullRequestsItem { pub id: String, pub number: i64, pub title: String, pub state: String, pub created_at: String, pub updated_at: String, #[serde(skip_serializing_if = "Option::is_none")] pub author_login: Option<String> }
+pub struct ListPullRequestsItem {
+    pub id: String,
+    pub number: i64,
+    pub title: String,
+    pub state: String,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_login: Option<String>,
+}
 
 #[derive(Debug, Serialize)]
-pub struct ListPullRequestsOutput { pub items: Option<Vec<ListPullRequestsItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct ListPullRequestsOutput {
+    pub items: Option<Vec<ListPullRequestsItem>>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 #[derive(Debug, Deserialize)]
-pub struct GetPullRequestInput { pub owner: String, pub repo: String, pub number: i64, pub include_author: Option<bool> }
+pub struct GetPullRequestInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    pub include_author: Option<bool>,
+}
 
 #[derive(Debug, Serialize)]
-pub struct GetPullRequestItem { pub id: String, pub number: i64, pub title: String, #[serde(skip_serializing_if = "Option::is_none")] pub body: Option<String>, pub state: String, pub is_draft: bool, pub created_at: String, pub updated_at: String, pub merged: bool, #[serde(skip_serializing_if = "Option::is_none")] pub merged_at: Option<String>, #[serde(skip_serializing_if = "Option::is_none")] pub author_login: Option<String> }
+pub struct GetPullRequestItem {
+    pub id: String,
+    pub number: i64,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    pub state: String,
+    pub is_draft: bool,
+    pub created_at: String,
+    pub updated_at: String,
+    pub merged: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merged_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_login: Option<String>,
+}
 
 #[derive(Debug, Serialize)]
-pub struct GetPullRequestOutput { pub item: Option<GetPullRequestItem>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct GetPullRequestOutput {
+    pub item: Option<GetPullRequestItem>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 #[derive(Debug, Deserialize)]
-pub struct ListPrCommentsInput { pub owner: String, pub repo: String, pub number: i64, pub cursor: Option<String>, pub limit: Option<u32>, pub include_author: Option<bool> }
+pub struct ListPrCommentsInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    pub cursor: Option<String>,
+    pub limit: Option<u32>,
+    pub include_author: Option<bool>,
+}
 
 #[derive(Debug, Serialize)]
-pub struct PlainComment { pub id: String, pub body: String, #[serde(skip_serializing_if = "Option::is_none")] pub author_login: Option<String>, pub created_at: String, pub updated_at: String }
+pub struct PlainComment {
+    pub id: String,
+    pub body: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_login: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
 
 #[derive(Debug, Serialize)]
-pub struct ListPrCommentsOutput { pub items: Option<Vec<PlainComment>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct ListPrCommentsOutput {
+    pub items: Option<Vec<PlainComment>>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 #[derive(Debug, Deserialize)]
-pub struct ListPrReviewCommentsInput { pub owner: String, pub repo: String, pub number: i64, pub cursor: Option<String>, pub limit: Option<u32>, pub include_author: Option<bool>, pub include_location: Option<bool> }
+pub struct ListPrReviewCommentsInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    pub cursor: Option<String>,
+    pub limit: Option<u32>,
+    pub include_author: Option<bool>,
+    pub include_location: Option<bool>,
+}
 
 #[derive(Debug, Serialize)]
 pub struct ReviewCommentItem {
     pub id: String,
     pub body: String,
-    #[serde(skip_serializing_if = "Option::is_none")] pub author_login: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_login: Option<String>,
     pub created_at: String,
     pub updated_at: String,
-    #[serde(skip_serializing_if = "Option::is_none")] pub path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub line: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub start_line: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub side: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub start_side: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub original_line: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub original_start_line: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub diff_hunk: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub commit_sha: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub original_commit_sha: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_line: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub side: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_side: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_line: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_start_line: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diff_hunk: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit_sha: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_commit_sha: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct ListPrReviewCommentsOutput { pub items: Option<Vec<ReviewCommentItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct ListPrReviewCommentsOutput {
+    pub items: Option<Vec<ReviewCommentItem>>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 #[derive(Debug, Deserialize)]
-pub struct ListPrReviewThreadsInput { pub owner: String, pub repo: String, pub number: i64, pub cursor: Option<String>, pub limit: Option<u32>, pub include_author: Option<bool>, pub include_location: Option<bool> }
+pub struct ListPrReviewThreadsInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    pub cursor: Option<String>,
+    pub limit: Option<u32>,
+    pub include_author: Option<bool>,
+    pub include_location: Option<bool>,
+}
 
 #[derive(Debug, Serialize)]
 pub struct ReviewThreadItem {
@@ -363,81 +511,254 @@ pub struct ReviewThreadItem {
     pub is_resolved: bool,
     pub is_outdated: bool,
     pub comments_count: i64,
-    #[serde(skip_serializing_if = "Option::is_none")] pub resolved_by_login: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub line: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub start_line: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub side: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub start_side: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved_by_login: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_line: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub side: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_side: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct ListPrReviewThreadsOutput { pub items: Option<Vec<ReviewThreadItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct ListPrReviewThreadsOutput {
+    pub items: Option<Vec<ReviewThreadItem>>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 #[derive(Debug, Deserialize)]
-pub struct ResolveThreadInput { pub thread_id: String }
+pub struct ResolveThreadInput {
+    pub thread_id: String,
+}
 #[derive(Debug, Serialize)]
-pub struct ResolveThreadOutput { pub ok: bool, pub thread_id: String, pub is_resolved: bool, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct ResolveThreadOutput {
+    pub ok: bool,
+    pub thread_id: String,
+    pub is_resolved: bool,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 #[derive(Debug, Deserialize)]
-pub struct ListPrReviewsInput { pub owner: String, pub repo: String, pub number: i64, pub cursor: Option<String>, pub limit: Option<u32>, pub include_author: Option<bool> }
+pub struct ListPrReviewsInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    pub cursor: Option<String>,
+    pub limit: Option<u32>,
+    pub include_author: Option<bool>,
+}
 #[derive(Debug, Serialize)]
-pub struct PrReviewItem { pub id: String, pub state: String, pub submitted_at: Option<String>, #[serde(skip_serializing_if = "Option::is_none")] pub author_login: Option<String> }
+pub struct PrReviewItem {
+    pub id: String,
+    pub state: String,
+    pub submitted_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_login: Option<String>,
+}
 #[derive(Debug, Serialize)]
-pub struct ListPrReviewsOutput { pub items: Option<Vec<PrReviewItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct ListPrReviewsOutput {
+    pub items: Option<Vec<PrReviewItem>>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 #[derive(Debug, Deserialize)]
-pub struct ListPrCommitsInput { pub owner: String, pub repo: String, pub number: i64, pub cursor: Option<String>, pub limit: Option<u32>, pub include_author: Option<bool> }
+pub struct ListPrCommitsInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    pub cursor: Option<String>,
+    pub limit: Option<u32>,
+    pub include_author: Option<bool>,
+}
 #[derive(Debug, Serialize)]
-pub struct PrCommitItem { pub sha: String, pub title: String, pub authored_at: String, #[serde(skip_serializing_if = "Option::is_none")] pub author_login: Option<String> }
+pub struct PrCommitItem {
+    pub sha: String,
+    pub title: String,
+    pub authored_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_login: Option<String>,
+}
 #[derive(Debug, Serialize)]
-pub struct ListPrCommitsOutput { pub items: Option<Vec<PrCommitItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct ListPrCommitsOutput {
+    pub items: Option<Vec<PrCommitItem>>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 #[derive(Debug, Deserialize)]
-pub struct ListPrFilesInput { pub owner: String, pub repo: String, pub number: i64, pub page: Option<u32>, pub per_page: Option<u32>, pub include_patch: Option<bool> }
+pub struct ListPrFilesInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
+    pub include_patch: Option<bool>,
+}
 #[derive(Debug, Serialize)]
-pub struct PrFileItem { pub filename: String, pub status: String, pub additions: i64, pub deletions: i64, pub changes: i64, pub sha: String, #[serde(skip_serializing_if = "Option::is_none")] pub patch: Option<String> }
+pub struct PrFileItem {
+    pub filename: String,
+    pub status: String,
+    pub additions: i64,
+    pub deletions: i64,
+    pub changes: i64,
+    pub sha: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub patch: Option<String>,
+}
 #[derive(Debug, Serialize)]
-pub struct ListPrFilesOutput { pub items: Option<Vec<PrFileItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct ListPrFilesOutput {
+    pub items: Option<Vec<PrFileItem>>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 #[derive(Debug, Deserialize)]
-pub struct GetPrTextInput { pub owner: String, pub repo: String, pub number: i64 }
+pub struct GetPrTextInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+}
 #[derive(Debug, Serialize)]
-pub struct GetPrTextOutput { pub diff: Option<String>, pub patch: Option<String>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct GetPrTextOutput {
+    pub diff: Option<String>,
+    pub patch: Option<String>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 // Actions / Workflows (REST) inputs/outputs
 #[derive(Debug, Deserialize)]
-pub struct ListWorkflowsInput { pub owner: String, pub repo: String, pub page: Option<u32>, pub per_page: Option<u32> }
+pub struct ListWorkflowsInput {
+    pub owner: String,
+    pub repo: String,
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
+}
 #[derive(Debug, Serialize)]
-pub struct WorkflowItem { pub id: i64, pub name: String, pub path: String, pub state: String }
+pub struct WorkflowItem {
+    pub id: i64,
+    pub name: String,
+    pub path: String,
+    pub state: String,
+}
 #[derive(Debug, Serialize)]
-pub struct ListWorkflowsOutput { pub items: Option<Vec<WorkflowItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct ListWorkflowsOutput {
+    pub items: Option<Vec<WorkflowItem>>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 #[derive(Debug, Deserialize)]
-pub struct ListWorkflowRunsInput { pub owner: String, pub repo: String, pub page: Option<u32>, pub per_page: Option<u32> }
+pub struct ListWorkflowRunsInput {
+    pub owner: String,
+    pub repo: String,
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
+}
 #[derive(Debug, Serialize)]
-pub struct WorkflowRunItem { pub id: i64, pub run_number: i64, pub event: String, pub status: String, pub conclusion: Option<String>, pub head_sha: String, pub created_at: String, pub updated_at: String }
+pub struct WorkflowRunItem {
+    pub id: i64,
+    pub run_number: i64,
+    pub event: String,
+    pub status: String,
+    pub conclusion: Option<String>,
+    pub head_sha: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
 #[derive(Debug, Serialize)]
-pub struct ListWorkflowRunsOutput { pub items: Option<Vec<WorkflowRunItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct ListWorkflowRunsOutput {
+    pub items: Option<Vec<WorkflowRunItem>>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 #[derive(Debug, Deserialize)]
-pub struct GetWorkflowRunInput { pub owner: String, pub repo: String, pub run_id: i64, pub exclude_pull_requests: Option<bool> }
+pub struct GetWorkflowRunInput {
+    pub owner: String,
+    pub repo: String,
+    pub run_id: i64,
+    pub exclude_pull_requests: Option<bool>,
+}
 #[derive(Debug, Serialize)]
-pub struct GetWorkflowRunOutput { pub item: Option<WorkflowRunItem>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct GetWorkflowRunOutput {
+    pub item: Option<WorkflowRunItem>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 #[derive(Debug, Deserialize)]
-pub struct ListWorkflowJobsInput { pub owner: String, pub repo: String, pub run_id: i64, pub filter: Option<String>, pub page: Option<u32>, pub per_page: Option<u32> }
+pub struct ListWorkflowJobsInput {
+    pub owner: String,
+    pub repo: String,
+    pub run_id: i64,
+    pub filter: Option<String>,
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
+}
 #[derive(Debug, Serialize)]
-pub struct WorkflowJobItem { pub id: i64, pub name: String, pub status: String, pub conclusion: Option<String>, pub started_at: Option<String>, pub completed_at: Option<String> }
+pub struct WorkflowJobItem {
+    pub id: i64,
+    pub name: String,
+    pub status: String,
+    pub conclusion: Option<String>,
+    pub started_at: Option<String>,
+    pub completed_at: Option<String>,
+}
 #[derive(Debug, Serialize)]
-pub struct ListWorkflowJobsOutput { pub items: Option<Vec<WorkflowJobItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct ListWorkflowJobsOutput {
+    pub items: Option<Vec<WorkflowJobItem>>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 #[derive(Debug, Deserialize)]
-pub struct GetJobLogsInput { pub owner: String, pub repo: String, pub job_id: i64, pub tail_lines: Option<usize>, pub include_timestamps: Option<bool> }
+pub struct GetJobLogsInput {
+    pub owner: String,
+    pub repo: String,
+    pub job_id: i64,
+    pub tail_lines: Option<usize>,
+    pub include_timestamps: Option<bool>,
+}
 #[derive(Debug, Serialize)]
-pub struct GetJobLogsOutput { pub logs: Option<String>, pub truncated: bool, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct GetJobLogsOutput {
+    pub logs: Option<String>,
+    pub truncated: bool,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
 
 #[derive(Debug, Deserialize)]
-pub struct RunIdInput { pub owner: String, pub repo: String, pub run_id: i64 }
+pub struct RunIdInput {
+    pub owner: String,
+    pub repo: String,
+    pub run_id: i64,
+}
 #[derive(Debug, Serialize)]
-pub struct OkOutput { pub ok: bool, #[serde(skip_serializing_if = "Option::is_none")] pub queued_run_id: Option<i64>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+pub struct OkOutput {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queued_run_id: Option<i64>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
