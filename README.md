@@ -2,7 +2,7 @@
 
 GitHub MCP server (Rust, stdio JSON-RPC).
 
-Quickstart
+Quickstart:
 - Prereqs: Rust 1.90.0+, cargo; set `GITHUB_TOKEN` or `GH_TOKEN`.
 - Build: `cargo build`
 - Run (stdio JSON-RPC):
