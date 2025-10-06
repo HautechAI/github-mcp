@@ -131,6 +131,8 @@ jobs:
           fi
           # Combine and sort lines for order-agnostic result
           cat "${files[@]}" | sort -u > dist/SHA256SUMS.txt
+          # Normalize potential CRLF line endings to LF to avoid stray \r in filenames
+          sed -i 's/\r$//' dist/SHA256SUMS.txt
           echo "Combined checksums count:" && wc -l dist/SHA256SUMS.txt
           # Ensure only one SHA256SUMS.txt exists at root
           if [[ ! -f dist/SHA256SUMS.txt ]]; then echo "Missing dist/SHA256SUMS.txt" >&2; exit 1; fi
