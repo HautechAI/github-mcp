@@ -1,4 +1,4 @@
-use github_mcp::config::Config;
+// remove unused import to satisfy clippy
 use github_mcp::http::{
     decode_rest_cursor, encode_rest_cursor, extract_rate_from_rest, map_status_to_error, RestCursor,
 };

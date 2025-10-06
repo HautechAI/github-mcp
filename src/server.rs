@@ -1,11 +1,13 @@
+#![allow(non_snake_case)] // GraphQL/REST field names map directly; keep original casing
 use crate::config::Config;
 use crate::http::{self};
 use crate::tools::*;
-use log::{debug, info, warn};
+use log::{debug, info};
+// use reqwest::header::HeaderMap; // not needed currently
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io::{self, Read, Write};
-use uuid::Uuid;
+// uuid::Uuid not used; remove to satisfy clippy
 
 // Minimal JSON-RPC 2.0 types
 #[derive(Debug, Serialize, Deserialize)]
@@ -190,15 +192,7 @@ fn enforce_limit(limit: Option<u32>) -> Result<u32, String> {
     Ok(l)
 }
 
-#[derive(Deserialize)]
-struct ListIssuesVars {
-    owner: String,
-    repo: String,
-    first: i64,
-    after: Option<String>,
-    states: Option<Vec<String>>,
-    filterBy: Option<serde_json::Value>,
-}
+// Removed unused ListIssuesVars; we build vars as serde_json::Value
 
 fn handle_list_issues(id: Option<Id>, params: Value) -> Response {
     let input: ListIssuesInput = match serde_json::from_value(params) {
@@ -327,6 +321,7 @@ fn handle_list_workflows(id: Option<Id>, params: Value) -> Response {
         #[derive(Deserialize)]
         struct Workflows {
             workflows: Vec<Workflow>,
+            #[allow(dead_code)]
             total_count: i64,
         }
         #[derive(Deserialize)]
@@ -367,7 +362,7 @@ fn handle_list_workflows(id: Option<Id>, params: Value) -> Response {
         let has_more = resp
             .headers
             .as_ref()
-            .map(|h| http::has_next_page_from_link(h))
+            .map(http::has_next_page_from_link)
             .unwrap_or(false);
         let next_cursor = if has_more {
             Some(http::encode_rest_cursor(http::RestCursor {
@@ -479,7 +474,7 @@ fn handle_list_workflow_runs(id: Option<Id>, params: Value) -> Response {
         let has_more = resp
             .headers
             .as_ref()
-            .map(|h| http::has_next_page_from_link(h))
+            .map(http::has_next_page_from_link)
             .unwrap_or(false);
         let next_cursor = if has_more {
             Some(http::encode_rest_cursor(http::RestCursor {
@@ -686,7 +681,7 @@ fn handle_list_workflow_jobs(id: Option<Id>, params: Value) -> Response {
         let has_more = resp
             .headers
             .as_ref()
-            .map(|h| http::has_next_page_from_link(h))
+            .map(http::has_next_page_from_link)
             .unwrap_or(false);
         let next_cursor = if has_more {
             Some(http::encode_rest_cursor(http::RestCursor {
@@ -876,7 +871,7 @@ fn handle_get_workflow_job_logs(id: Option<Id>, params: Value) -> Response {
                     .collect();
             }
             let aggregated = lines.join("\n");
-            return (
+            (
                 Some(aggregated),
                 truncated,
                 Meta {
@@ -885,11 +880,11 @@ fn handle_get_workflow_job_logs(id: Option<Id>, params: Value) -> Response {
                     rate: None,
                 },
                 None,
-            );
+            )
         } else if status.is_success() {
             // Some GH instances may return raw text; handle gracefully
             let text = res.text().await.unwrap_or_default();
-            return (
+            (
                 Some(text),
                 false,
                 Meta {
@@ -898,11 +893,11 @@ fn handle_get_workflow_job_logs(id: Option<Id>, params: Value) -> Response {
                     rate: None,
                 },
                 None,
-            );
+            )
         } else {
             let body = res.text().await.unwrap_or_default();
             let err = http::map_status_to_error(status, body);
-            return (
+            (
                 None,
                 false,
                 Meta {
@@ -915,7 +910,7 @@ fn handle_get_workflow_job_logs(id: Option<Id>, params: Value) -> Response {
                     message: err.message,
                     retriable: err.retriable,
                 }),
-            );
+            )
         }
     });
     let out = GetJobLogsOutput {
@@ -1247,6 +1242,7 @@ fn handle_list_pr_comments(id: Option<Id>, params: Value) -> Response {
         "#;
         #[derive(Deserialize)] struct Author { login: String }
         #[derive(Deserialize)] struct Node { id: String, body: String, createdAt: String, updatedAt: String, author: Option<Author> }
+        #[derive(Deserialize)] struct PageInfo { hasNextPage: bool, endCursor: Option<String> }
         #[derive(Deserialize)] struct Comments { nodes: Vec<Node>, pageInfo: PageInfo }
         #[derive(Deserialize)] struct PR { comments: Comments }
         #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
@@ -1312,6 +1308,7 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
         #[derive(Deserialize)] struct Commit { oid: String }
         #[derive(Deserialize)] struct Node { id: String, body: String, createdAt: String, updatedAt: String, author: Option<Author>, path: Option<String>, diffHunk: Option<String>, line: Option<i64>, startLine: Option<i64>, side: Option<String>, startSide: Option<String>, originalLine: Option<i64>, originalStartLine: Option<i64>, commit: Option<Commit>, originalCommit: Option<Commit>, pullRequestReviewThread: Option<ThreadLoc> }
         #[derive(Deserialize)] struct ThreadLoc { path: Option<String>, line: Option<i64>, startLine: Option<i64>, side: Option<String>, startSide: Option<String> }
+        #[derive(Deserialize)] struct PageInfo { hasNextPage: bool, endCursor: Option<String> }
         #[derive(Deserialize)] struct RC { nodes: Vec<Node>, pageInfo: PageInfo }
         #[derive(Deserialize)] struct PR { reviewComments: RC }
         #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
@@ -1322,19 +1319,25 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
         let pr = match data.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
         let include_author = input.include_author.unwrap_or(false);
         let include_loc = input.include_location.unwrap_or(false);
-        let items: Vec<ReviewCommentItem> = pr.reviewComments.nodes.into_iter().map(|n| ReviewCommentItem{
-            id: n.id, body: n.body, created_at: n.createdAt, updated_at: n.updatedAt,
-            author_login: if include_author { n.author.map(|a| a.login) } else { None },
-            path: if include_loc { n.path.or_else(|| n.pullRequestReviewThread.and_then(|t| t.path)) } else { None },
-            line: if include_loc { n.line.or_else(|| n.pullRequestReviewThread.as_ref().and_then(|t| t.line)) } else { None },
-            start_line: if include_loc { n.startLine.or_else(|| n.pullRequestReviewThread.as_ref().and_then(|t| t.startLine)) } else { None },
-            side: if include_loc { map_side(n.side.or_else(|| n.pullRequestReviewThread.and_then(|t| t.side))) } else { None },
-            start_side: if include_loc { map_side(n.startSide.or_else(|| n.pullRequestReviewThread.and_then(|t| t.startSide))) } else { None },
-            original_line: if include_loc { n.originalLine } else { None },
-            original_start_line: if include_loc { n.originalStartLine } else { None },
-            diff_hunk: if include_loc { n.diffHunk } else { None },
-            commit_sha: if include_loc { n.commit.map(|c| c.oid) } else { None },
-            original_commit_sha: if include_loc { n.originalCommit.map(|c| c.oid) } else { None },
+        let items: Vec<ReviewCommentItem> = pr.reviewComments.nodes.into_iter().map(|n| {
+            let t = n.pullRequestReviewThread.as_ref();
+            ReviewCommentItem{
+                id: n.id,
+                body: n.body,
+                created_at: n.createdAt,
+                updated_at: n.updatedAt,
+                author_login: if include_author { n.author.map(|a| a.login) } else { None },
+                path: if include_loc { n.path.or_else(|| t.and_then(|tr| tr.path.clone())) } else { None },
+                line: if include_loc { n.line.or_else(|| t.and_then(|tr| tr.line)) } else { None },
+                start_line: if include_loc { n.startLine.or_else(|| t.and_then(|tr| tr.startLine)) } else { None },
+                side: if include_loc { map_side(n.side.or_else(|| t.and_then(|tr| tr.side.clone()))) } else { None },
+                start_side: if include_loc { map_side(n.startSide.or_else(|| t.and_then(|tr| tr.startSide.clone()))) } else { None },
+                original_line: if include_loc { n.originalLine } else { None },
+                original_start_line: if include_loc { n.originalStartLine } else { None },
+                diff_hunk: if include_loc { n.diffHunk } else { None },
+                commit_sha: if include_loc { n.commit.map(|c| c.oid) } else { None },
+                original_commit_sha: if include_loc { n.originalCommit.map(|c| c.oid) } else { None },
+            }
         }).collect();
         let meta = Meta { next_cursor: pr.reviewComments.pageInfo.endCursor, has_more: pr.reviewComments.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
@@ -1381,6 +1384,7 @@ fn handle_list_pr_review_threads(id: Option<Id>, params: Value) -> Response {
         #[derive(Deserialize)] struct Author { login: String }
         #[derive(Deserialize)] struct Node { id: String, isResolved: bool, isOutdated: bool, comments: Count, resolvedBy: Option<Author>, path: Option<String>, line: Option<i64>, startLine: Option<i64>, side: Option<String>, startSide: Option<String> }
         #[derive(Deserialize)] struct Count { totalCount: i64 }
+        #[derive(Deserialize)] struct PageInfo { hasNextPage: bool, endCursor: Option<String> }
         #[derive(Deserialize)] struct Threads { nodes: Vec<Node>, pageInfo: PageInfo }
         #[derive(Deserialize)] struct PR { reviewThreads: Threads }
         #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
@@ -1424,6 +1428,7 @@ fn handle_resolve_pr_review_thread(id: Option<Id>, params: Value) -> Response {
         Err(e) => return rpc_error(id, -32603, &e, None),
     };
     let rt = tokio::runtime::Runtime::new().unwrap();
+    let thread_id_for_vars = input.thread_id.clone();
     let (ok, meta, err, is_resolved) = rt.block_on(async move {
         let client = match http::build_client(&cfg) {
             Ok(c) => c,
@@ -1451,6 +1456,7 @@ fn handle_resolve_pr_review_thread(id: Option<Id>, params: Value) -> Response {
         "#;
         #[derive(Deserialize)]
         struct Thread {
+            #[allow(dead_code)]
             id: String,
             isResolved: bool,
         }
@@ -1462,7 +1468,7 @@ fn handle_resolve_pr_review_thread(id: Option<Id>, params: Value) -> Response {
         struct Resolved {
             thread: Thread,
         }
-        let vars = serde_json::json!({ "thread_id": input.thread_id.clone() });
+        let vars = serde_json::json!({ "thread_id": thread_id_for_vars });
         let (data, _meta, err) = http::graphql_post::<serde_json::Value, Resp, serde_json::Value>(
             &client, &cfg, query, &vars,
         )
@@ -1518,6 +1524,7 @@ fn handle_unresolve_pr_review_thread(id: Option<Id>, params: Value) -> Response 
         Err(e) => return rpc_error(id, -32603, &e, None),
     };
     let rt = tokio::runtime::Runtime::new().unwrap();
+    let thread_id_for_vars = input.thread_id.clone();
     let (ok, meta, err, is_resolved) = rt.block_on(async move {
         let client = match http::build_client(&cfg) {
             Ok(c) => c,
@@ -1545,6 +1552,7 @@ fn handle_unresolve_pr_review_thread(id: Option<Id>, params: Value) -> Response 
         "#;
         #[derive(Deserialize)]
         struct Thread {
+            #[allow(dead_code)]
             id: String,
             isResolved: bool,
         }
@@ -1556,7 +1564,7 @@ fn handle_unresolve_pr_review_thread(id: Option<Id>, params: Value) -> Response 
         struct Resolved {
             thread: Thread,
         }
-        let vars = serde_json::json!({ "thread_id": input.thread_id.clone() });
+        let vars = serde_json::json!({ "thread_id": thread_id_for_vars });
         let (data, _meta, err) = http::graphql_post::<serde_json::Value, Resp, serde_json::Value>(
             &client, &cfg, query, &vars,
         )
@@ -1632,6 +1640,7 @@ fn handle_list_pr_reviews(id: Option<Id>, params: Value) -> Response {
         "#;
         #[derive(Deserialize)] struct Author { login: String }
         #[derive(Deserialize)] struct Node { id: String, state: String, submittedAt: Option<String>, author: Option<Author> }
+        #[derive(Deserialize)] struct PageInfo { hasNextPage: bool, endCursor: Option<String> }
         #[derive(Deserialize)] struct Reviews { nodes: Vec<Node>, pageInfo: PageInfo }
         #[derive(Deserialize)] struct PR { reviews: Reviews }
         #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
@@ -1687,6 +1696,7 @@ fn handle_list_pr_commits(id: Option<Id>, params: Value) -> Response {
         #[derive(Deserialize)] struct CommitAuthor { user: Option<User> }
         #[derive(Deserialize)] struct Commit { oid: String, messageHeadline: String, authoredDate: String, author: Option<CommitAuthor> }
         #[derive(Deserialize)] struct Node { commit: Commit }
+        #[derive(Deserialize)] struct PageInfo { hasNextPage: bool, endCursor: Option<String> }
         #[derive(Deserialize)] struct Commits { nodes: Vec<Node>, pageInfo: PageInfo }
         #[derive(Deserialize)] struct PR { commits: Commits }
         #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
@@ -1776,7 +1786,8 @@ fn handle_list_pr_files(id: Option<Id>, params: Value) -> Response {
             );
         }
         let rate = resp.meta.rate;
-        let has_more = http::has_next_page_from_link(&HeaderMap::new()); // placeholder; http::rest_get_json does not return headers
+        // No Link header available via rest_get_json; assume more pages if current page filled
+        let has_more = (resp.value.as_ref().map(|v| v.len()).unwrap_or(0) as i64) >= i64::from(per_page);
         let next_cursor = if has_more {
             Some(format!("page:{}", page + 1))
         } else {
@@ -1928,11 +1939,14 @@ fn handle_get_pr_status_summary(id: Option<Id>, params: Value) -> Response {
           }
         }
         "#;
+        // These intermediates are kept for clarity; suppress dead_code as we match via ContextNode
+        #[allow(dead_code)]
         #[derive(Deserialize)] struct CheckRun { name: String, conclusion: Option<String> }
+        #[allow(dead_code)]
         #[derive(Deserialize)] struct StatusContext { context: String, state: Option<String> }
         #[derive(Deserialize)] struct ContextNode { __typename: String, #[serde(default)] name: Option<String>, #[serde(default)] conclusion: Option<String>, #[serde(default)] context: Option<String>, #[serde(default)] state: Option<String> }
         #[derive(Deserialize)] struct Contexts { nodes: Vec<ContextNode> }
-        #[derive(Deserialize)] struct Rollup { state: Option<String>, contexts: Option<Contexts> }
+        #[derive(Deserialize)] struct Rollup { #[allow(dead_code)] state: Option<String>, contexts: Option<Contexts> }
         #[derive(Deserialize)] struct Commit { statusCheckRollup: Option<Rollup> }
         #[derive(Deserialize)] struct CommitNode { commit: Commit }
         #[derive(Deserialize)] struct Commits { nodes: Vec<CommitNode> }
@@ -1993,6 +2007,7 @@ fn handle_list_pull_requests(id: Option<Id>, params: Value) -> Response {
         "#;
         #[derive(Deserialize)] struct Author { login: String }
         #[derive(Deserialize)] struct Node { id: String, number: i64, title: String, state: String, createdAt: String, updatedAt: String, author: Option<Author> }
+        #[derive(Deserialize)] struct PageInfo { hasNextPage: bool, endCursor: Option<String> }
         #[derive(Deserialize)] struct PRs { nodes: Vec<Node>, pageInfo: PageInfo }
         #[derive(Deserialize)] struct Repo { pullRequests: PRs }
         #[derive(Deserialize)] struct Data { repository: Option<Repo> }
@@ -2103,6 +2118,8 @@ fn handle_get_issue(id: Option<Id>, params: Value) -> Response {
         }
         "#;
         #[derive(Deserialize)]
+        struct Author { login: String }
+        #[derive(Deserialize)]
         struct Issue { id: String, number: i64, title: String, body: Option<String>, state: String, createdAt: String, updatedAt: String, author: Option<Author> }
         #[derive(Deserialize)]
         struct Repo { issue: Option<Issue> }
@@ -2160,7 +2177,9 @@ fn handle_list_issue_comments(id: Option<Id>, params: Value) -> Response {
           }
         }
         "#;
+        #[derive(Deserialize)] struct Author { login: String }
         #[derive(Deserialize)] struct Node { id: String, body: String, createdAt: String, updatedAt: String, author: Option<Author> }
+        #[derive(Deserialize)] struct PageInfo { hasNextPage: bool, endCursor: Option<String> }
         #[derive(Deserialize)] struct Comments { nodes: Vec<Node>, pageInfo: PageInfo }
         #[derive(Deserialize)] struct Issue { comments: Comments }
         #[derive(Deserialize)] struct Repo { issue: Option<Issue> }

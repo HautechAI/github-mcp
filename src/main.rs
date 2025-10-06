@@ -5,7 +5,7 @@ mod server;
 mod tools;
 pub mod types;
 
-use clap::Parser;
+// clap::Parser is not used directly here; clap is used in cli module.
 
 #[tokio::main(flavor = "current_thread")] // stdio server loops synchronously for now
 async fn main() -> anyhow::Result<()> {

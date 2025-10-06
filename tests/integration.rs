@@ -1,6 +1,4 @@
-use assert_cmd::prelude::*;
-use predicates::prelude::*;
-use std::process::Command;
+use assert_cmd::Command;
 
 fn run(req: &serde_json::Value) -> anyhow::Result<String> {
     let mut cmd = Command::cargo_bin("github-mcp")?;

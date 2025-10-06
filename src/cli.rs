@@ -1,5 +1,6 @@
 use clap::{Arg, ArgAction, Command};
 
+#[allow(dead_code)]
 pub struct CliOptions {
     pub log_level: Option<String>,
     pub version: bool,

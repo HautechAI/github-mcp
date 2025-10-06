@@ -1,6 +1,5 @@
-use assert_cmd::prelude::*;
+use assert_cmd::Command;
 use httpmock::{Method::GET, MockServer};
-use std::process::Command;
 
 fn run_with_env(req: &serde_json::Value, envs: &[(&str, &str)]) -> anyhow::Result<String> {
     let mut cmd = Command::cargo_bin("github-mcp")?;

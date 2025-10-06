@@ -1,7 +1,6 @@
-use assert_cmd::prelude::*;
+use assert_cmd::Command;
 use httpmock::{Method::GET, Method::POST, MockServer};
 use std::io::Write;
-use std::process::Command;
 use zip::write::FileOptions;
 
 fn run_with_env(req: &serde_json::Value, envs: &[(&str, &str)]) -> anyhow::Result<String> {
