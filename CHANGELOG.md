@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file by Release Please.
 
+## [0.1.1](https://github.com/HautechAI/github-mcp/compare/v0.1.0...v0.1.1) (2025-10-06)
+
+
+### Bug Fixes
+
+* README.md ([994025f](https://github.com/HautechAI/github-mcp/commit/994025fc0800a3ab5082ca130a1524b71ad917c7))
+
 ## 0.1.0 (2025-10-06)
 
 
