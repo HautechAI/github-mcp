@@ -52,32 +52,22 @@ jobs:
           else
             cargo build --release --target ${{ matrix.target }}
           fi
-      - name: Package
+      - name: Package (Linux/macOS)
+        if: ${{ matrix.os != 'windows-latest' }}
         shell: bash
         run: |
           set -euo pipefail
           BIN=github-mcp
           OUTDIR=dist/${{ matrix.target }}
           mkdir -p "$OUTDIR"
-          # Name outputs uniquely per target to avoid collisions when merging artifacts
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            SRC="target/${{ matrix.target }}/release/${BIN}.exe"
-            FILENAME="${BIN}-${{ matrix.target }}.exe"
-          else
-            SRC="target/${{ matrix.target }}/release/${BIN}"
-            FILENAME="${BIN}-${{ matrix.target }}"
-          fi
+          SRC="target/${{ matrix.target }}/release/${BIN}"
+          FILENAME="${BIN}-${{ matrix.target }}"
           cp "$SRC" "$OUTDIR/$FILENAME"
-          # Pre-hash sanity check to fail early (especially on Windows path issues)
           if [[ ! -f "$OUTDIR/$FILENAME" ]]; then
             echo "Expected file missing after copy: $OUTDIR/$FILENAME" >&2
             echo "Listing $OUTDIR contents:" && ls -la "$OUTDIR" || true
             exit 1
           fi
-          # Export for PowerShell access via $Env:FILENAME
-          export FILENAME
-          # Write per-target checksum file inside each OUTDIR
-          # Ensure the recorded filename matches the final uploaded binary name (no path prefix)
           case "${{ matrix.os }}" in
             ubuntu-latest)
               HASH=$(sha256sum "$OUTDIR/$FILENAME" | awk '{print $1}')
@@ -85,25 +75,28 @@ jobs:
             macos-14)
               HASH=$(shasum -a 256 "$OUTDIR/$FILENAME" | awk '{print $1}')
               ;;
-            windows-latest)
-              # Build Windows-native path using GITHUB_WORKSPACE and Join-Path; verify before hashing
-              HASH=$(powershell -NoProfile -Command "
-                $ErrorActionPreference = 'Stop'
-                $root = $Env:GITHUB_WORKSPACE
-                $p = Join-Path $root -ChildPath 'dist'
-                $p = Join-Path $p -ChildPath '${{ matrix.target }}'
-                $p = Join-Path $p -ChildPath $Env:FILENAME
-                Write-Host ('Final file path (Windows): ' + $p)
-                if (-not (Test-Path -LiteralPath $p)) {
-                  Write-Host ('File not found: ' + $p)
-                  exit 1
-                }
-                (Get-FileHash -Algorithm SHA256 -LiteralPath $p).Hash.ToLower()
-              " | tail -n 1)
-              ;;
             *) echo "Unsupported OS ${{ matrix.os }}" >&2; exit 1;;
           esac
           echo "$HASH  $FILENAME" > "$OUTDIR/SHA256SUMS-${{ matrix.target }}.txt"
+
+      - name: Package (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $BIN = 'github-mcp'
+          $Target = '${{ matrix.target }}'
+          $OutDir = Join-Path 'dist' $Target
+          New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+          $Src = Join-Path (Join-Path (Join-Path 'target' $Target) 'release') "$BIN.exe"
+          $FileName = "$BIN-$Target.exe"
+          $Dest = Join-Path $OutDir $FileName
+          Copy-Item -LiteralPath $Src -Destination $Dest -Force
+          if (-not (Test-Path -LiteralPath $Dest)) {
+            Write-Error "Expected file missing after copy: $Dest"
+          }
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Dest).Hash.ToLower()
+          "$hash  $FileName" | Set-Content -Encoding ascii (Join-Path $OutDir "SHA256SUMS-$Target.txt")
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
