@@ -119,15 +119,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          mapfile -t files < <(ls dist/*/SHA256SUMS-*.txt 2>/dev/null || true)
+          # Locate per-target checksum files regardless of merge path
+          # After actions/download-artifact with merge-multiple=true, files may be in dist/ root
+          # or under per-target subdirectories. Use find to be robust.
+          mapfile -t files < <(find dist -type f -name 'SHA256SUMS-*.txt' | sort)
           echo "Found per-target checksum files: ${#files[@]}"
           if [[ ${#files[@]} -ne 5 ]]; then
             echo "Expected 5 per-target checksum files, found ${#files[@]}" >&2
             ls -R dist || true
             exit 1
           fi
-          cat "${files[@]}" > dist/SHA256SUMS.txt
+          # Combine and sort lines for order-agnostic result
+          cat "${files[@]}" | sort -u > dist/SHA256SUMS.txt
           echo "Combined checksums count:" && wc -l dist/SHA256SUMS.txt
           # Ensure only one SHA256SUMS.txt exists at root
           if [[ ! -f dist/SHA256SUMS.txt ]]; then echo "Missing dist/SHA256SUMS.txt" >&2; exit 1; fi
@@ -161,9 +164,9 @@ jobs:
             exit 1
           fi
           # Validate SHA256SUMS.txt only exists once and filenames match binaries
-          if [[ $(ls dist/SHA256SUMS*.txt | wc -l) -ne 1 ]]; then
-            echo "There should be exactly one SHA256SUMS.txt in dist/" >&2
-            ls dist/SHA256SUMS*.txt || true
+          if [[ $(ls dist/SHA256SUMS.txt 2>/dev/null | wc -l) -ne 1 ]]; then
+            echo "There should be exactly one combined SHA256SUMS.txt in dist/" >&2
+            ls -l dist/ || true
             exit 1
           fi
           # Compare filenames in checksums vs actual binaries
