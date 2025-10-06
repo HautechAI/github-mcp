@@ -62,11 +62,20 @@ jobs:
           fi
           cp "$SRC" "$OUTDIR/$FILENAME"
           # Write per-target checksum file inside each OUTDIR
-          (
-            cd dist
-            sha256sum "${{ matrix.target }}/$FILENAME" > "${{ matrix.target }}/SHA256SUMS-${{ matrix.target }}.txt" \
-              || shasum -a 256 "${{ matrix.target }}/$FILENAME" > "${{ matrix.target }}/SHA256SUMS-${{ matrix.target }}.txt"
-          )
+          # Ensure the recorded filename matches the final uploaded binary name (no path prefix)
+          case "${{ matrix.os }}" in
+            ubuntu-latest)
+              HASH=$(sha256sum "$OUTDIR/$FILENAME" | awk '{print $1}')
+              ;;
+            macos-14)
+              HASH=$(shasum -a 256 "$OUTDIR/$FILENAME" | awk '{print $1}')
+              ;;
+            windows-latest)
+              HASH=$(powershell -NoProfile -Command "(Get-FileHash -Algorithm SHA256 -LiteralPath '$PWD/$OUTDIR/$FILENAME').Hash.ToLower()")
+              ;;
+            *) echo "Unsupported OS ${{ matrix.os }}" >&2; exit 1;;
+          esac
+          echo "$HASH  $FILENAME" > "$OUTDIR/SHA256SUMS-${{ matrix.target }}.txt"
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -88,24 +97,62 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          shopt -s nullglob globstar
-          files=(dist/**/SHA256SUMS-*.txt)
-          if [[ ${#files[@]} -eq 0 ]]; then
-            echo "No per-target checksum files found"
+          shopt -s nullglob
+          mapfile -t files < <(ls dist/*/SHA256SUMS-*.txt 2>/dev/null || true)
+          echo "Found per-target checksum files: ${#files[@]}"
+          if [[ ${#files[@]} -ne 5 ]]; then
+            echo "Expected 5 per-target checksum files, found ${#files[@]}" >&2
+            ls -R dist || true
             exit 1
           fi
           cat "${files[@]}" > dist/SHA256SUMS.txt
           echo "Combined checksums count:" && wc -l dist/SHA256SUMS.txt
+          # Ensure only one SHA256SUMS.txt exists at root
+          if [[ ! -f dist/SHA256SUMS.txt ]]; then echo "Missing dist/SHA256SUMS.txt" >&2; exit 1; fi
       - name: Collect binaries to dist root
         shell: bash
         run: |
           set -euo pipefail
-          shopt -s nullglob globstar
+          shopt -s nullglob
           # Move uniquely named binaries to dist/ root for release upload
-          for f in dist/**/github-mcp-*; do
-            [[ -f "$f" ]] || continue
-            mv -f "$f" dist/
+          # Tight patterns per target family to avoid accidental matches
+          patterns=(
+            'dist/*/github-mcp-*-unknown-linux-gnu'
+            'dist/*/github-mcp-*-apple-darwin'
+            'dist/*/github-mcp-*-pc-windows-msvc.exe'
+          )
+          moved=()
+          for pat in "${patterns[@]}"; do
+            for f in $pat; do
+              [[ -f "$f" ]] || continue
+              mv -f "$f" dist/
+              moved+=("$(basename "$f")")
+            done
           done
+          echo "Moved binaries: ${moved[*]:-none}"
+          # Validate exactly 5 binaries are present in dist/
+          mapfile -t bins < <(ls dist/github-mcp-* 2>/dev/null || true)
+          echo "Binaries in dist/: ${#bins[@]}"
+          if [[ ${#bins[@]} -ne 5 ]]; then
+            echo "Expected 5 binaries in dist/, found ${#bins[@]}" >&2
+            ls -l dist || true
+            exit 1
+          fi
+          # Validate SHA256SUMS.txt only exists once and filenames match binaries
+          if [[ $(ls dist/SHA256SUMS*.txt | wc -l) -ne 1 ]]; then
+            echo "There should be exactly one SHA256SUMS.txt in dist/" >&2
+            ls dist/SHA256SUMS*.txt || true
+            exit 1
+          fi
+          # Compare filenames in checksums vs actual binaries
+          sort <(awk '{print $2}' dist/SHA256SUMS.txt | xargs -n1 basename | sort -u) -o /tmp/check_names.txt
+          sort <(for b in "${bins[@]}"; do basename "$b"; done | sort -u) -o /tmp/bin_names.txt
+          if ! diff -u /tmp/bin_names.txt /tmp/check_names.txt; then
+            echo "Mismatch between binaries and checksum entries" >&2
+            echo "Binaries:"; cat /tmp/bin_names.txt
+            echo "Checksums:"; cat /tmp/check_names.txt
+            exit 1
+          fi
           echo "Assets in dist/:" && ls -l dist/
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
