@@ -178,6 +178,14 @@ pub async fn rest_get_text_with_accept(
     }
 }
 
+pub fn has_next_page_from_link(headers: &HeaderMap) -> bool {
+    if let Some(link) = headers.get("link").and_then(|v| v.to_str().ok()) {
+        // Simple check for rel="next"
+        return link.contains("rel=\"next\"");
+    }
+    false
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphQlResponse<T> {
     pub data: Option<T>,

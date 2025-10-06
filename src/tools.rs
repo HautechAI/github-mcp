@@ -119,7 +119,107 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
         }),
     };
 
-    vec![ping, list_issues, get_issue, list_issue_comments_plain, list_prs, get_pr]
+    let list_pr_comments = ToolDescriptor {
+        name: "list_pr_comments_plain".into(),
+        description: "List PR issue comments (plain)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"},"cursor":{"type":"string"},"limit":{"type":"integer"},"include_author":{"type":"boolean"}},
+            "required":["owner","repo","number"]
+        }),
+    };
+
+    let list_pr_review_comments = ToolDescriptor {
+        name: "list_pr_review_comments_plain".into(),
+        description: "List PR review comments (plain)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"},"cursor":{"type":"string"},"limit":{"type":"integer"},"include_author":{"type":"boolean"},"include_location":{"type":"boolean"}},
+            "required":["owner","repo","number"]
+        }),
+    };
+
+    let list_pr_review_threads = ToolDescriptor {
+        name: "list_pr_review_threads_light".into(),
+        description: "List PR review threads (light)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"},"cursor":{"type":"string"},"limit":{"type":"integer"},"include_author":{"type":"boolean"},"include_location":{"type":"boolean"}},
+            "required":["owner","repo","number"]
+        }),
+    };
+
+    let resolve_thread = ToolDescriptor {
+        name: "resolve_pr_review_thread".into(),
+        description: "Resolve a PR review thread".into(),
+        input_schema: serde_json::json!({"type":"object","additionalProperties":false,"properties":{"thread_id":{"type":"string"}},"required":["thread_id"]}),
+    };
+
+    let unresolve_thread = ToolDescriptor {
+        name: "unresolve_pr_review_thread".into(),
+        description: "Unresolve a PR review thread".into(),
+        input_schema: serde_json::json!({"type":"object","additionalProperties":false,"properties":{"thread_id":{"type":"string"}},"required":["thread_id"]}),
+    };
+
+    let list_pr_reviews = ToolDescriptor {
+        name: "list_pr_reviews_light".into(),
+        description: "List PR reviews (light)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"},"cursor":{"type":"string"},"limit":{"type":"integer"},"include_author":{"type":"boolean"}},
+            "required":["owner","repo","number"]
+        }),
+    };
+
+    let list_pr_commits = ToolDescriptor {
+        name: "list_pr_commits_light".into(),
+        description: "List PR commits (light)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"},"cursor":{"type":"string"},"limit":{"type":"integer"},"include_author":{"type":"boolean"}},
+            "required":["owner","repo","number"]
+        }),
+    };
+
+    let list_pr_files = ToolDescriptor {
+        name: "list_pr_files_light".into(),
+        description: "List PR files (REST)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"},"page":{"type":"integer"},"per_page":{"type":"integer"},"include_patch":{"type":"boolean"}},
+            "required":["owner","repo","number"]
+        }),
+    };
+
+    let get_pr_diff = ToolDescriptor {
+        name: "get_pr_diff".into(),
+        description: "Get PR diff (REST)".into(),
+        input_schema: serde_json::json!({"type":"object","additionalProperties":false,"properties":{"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"}},"required":["owner","repo","number"]}),
+    };
+    let get_pr_patch = ToolDescriptor {
+        name: "get_pr_patch".into(),
+        description: "Get PR patch (REST)".into(),
+        input_schema: serde_json::json!({"type":"object","additionalProperties":false,"properties":{"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"}},"required":["owner","repo","number"]}),
+    };
+
+    vec![
+        ping,
+        list_issues,
+        get_issue,
+        list_issue_comments_plain,
+        list_prs,
+        get_pr,
+        list_pr_comments,
+        list_pr_review_comments,
+        list_pr_review_threads,
+        resolve_thread,
+        unresolve_thread,
+        list_pr_reviews,
+        list_pr_commits,
+        list_pr_files,
+        get_pr_diff,
+        get_pr_patch,
+    ]
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -219,3 +319,88 @@ pub struct GetPullRequestItem { pub id: String, pub number: i64, pub title: Stri
 
 #[derive(Debug, Serialize)]
 pub struct GetPullRequestOutput { pub item: Option<GetPullRequestItem>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+
+#[derive(Debug, Deserialize)]
+pub struct ListPrCommentsInput { pub owner: String, pub repo: String, pub number: i64, pub cursor: Option<String>, pub limit: Option<u32>, pub include_author: Option<bool> }
+
+#[derive(Debug, Serialize)]
+pub struct PlainComment { pub id: String, pub body: String, #[serde(skip_serializing_if = "Option::is_none")] pub author_login: Option<String>, pub created_at: String, pub updated_at: String }
+
+#[derive(Debug, Serialize)]
+pub struct ListPrCommentsOutput { pub items: Option<Vec<PlainComment>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+
+#[derive(Debug, Deserialize)]
+pub struct ListPrReviewCommentsInput { pub owner: String, pub repo: String, pub number: i64, pub cursor: Option<String>, pub limit: Option<u32>, pub include_author: Option<bool>, pub include_location: Option<bool> }
+
+#[derive(Debug, Serialize)]
+pub struct ReviewCommentItem {
+    pub id: String,
+    pub body: String,
+    #[serde(skip_serializing_if = "Option::is_none")] pub author_login: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")] pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub line: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub start_line: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub side: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub start_side: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub original_line: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub original_start_line: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub diff_hunk: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub commit_sha: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub original_commit_sha: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ListPrReviewCommentsOutput { pub items: Option<Vec<ReviewCommentItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+
+#[derive(Debug, Deserialize)]
+pub struct ListPrReviewThreadsInput { pub owner: String, pub repo: String, pub number: i64, pub cursor: Option<String>, pub limit: Option<u32>, pub include_author: Option<bool>, pub include_location: Option<bool> }
+
+#[derive(Debug, Serialize)]
+pub struct ReviewThreadItem {
+    pub id: String,
+    pub is_resolved: bool,
+    pub is_outdated: bool,
+    pub comments_count: i64,
+    #[serde(skip_serializing_if = "Option::is_none")] pub resolved_by_login: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub line: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub start_line: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub side: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub start_side: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ListPrReviewThreadsOutput { pub items: Option<Vec<ReviewThreadItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+
+#[derive(Debug, Deserialize)]
+pub struct ResolveThreadInput { pub thread_id: String }
+#[derive(Debug, Serialize)]
+pub struct ResolveThreadOutput { pub ok: bool, pub thread_id: String, pub is_resolved: bool, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+
+#[derive(Debug, Deserialize)]
+pub struct ListPrReviewsInput { pub owner: String, pub repo: String, pub number: i64, pub cursor: Option<String>, pub limit: Option<u32>, pub include_author: Option<bool> }
+#[derive(Debug, Serialize)]
+pub struct PrReviewItem { pub id: String, pub state: String, pub submitted_at: Option<String>, #[serde(skip_serializing_if = "Option::is_none")] pub author_login: Option<String> }
+#[derive(Debug, Serialize)]
+pub struct ListPrReviewsOutput { pub items: Option<Vec<PrReviewItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+
+#[derive(Debug, Deserialize)]
+pub struct ListPrCommitsInput { pub owner: String, pub repo: String, pub number: i64, pub cursor: Option<String>, pub limit: Option<u32>, pub include_author: Option<bool> }
+#[derive(Debug, Serialize)]
+pub struct PrCommitItem { pub sha: String, pub title: String, pub authored_at: String, #[serde(skip_serializing_if = "Option::is_none")] pub author_login: Option<String> }
+#[derive(Debug, Serialize)]
+pub struct ListPrCommitsOutput { pub items: Option<Vec<PrCommitItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+
+#[derive(Debug, Deserialize)]
+pub struct ListPrFilesInput { pub owner: String, pub repo: String, pub number: i64, pub page: Option<u32>, pub per_page: Option<u32>, pub include_patch: Option<bool> }
+#[derive(Debug, Serialize)]
+pub struct PrFileItem { pub filename: String, pub status: String, pub additions: i64, pub deletions: i64, pub changes: i64, pub sha: String, #[serde(skip_serializing_if = "Option::is_none")] pub patch: Option<String> }
+#[derive(Debug, Serialize)]
+pub struct ListPrFilesOutput { pub items: Option<Vec<PrFileItem>>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
+
+#[derive(Debug, Deserialize)]
+pub struct GetPrTextInput { pub owner: String, pub repo: String, pub number: i64 }
+#[derive(Debug, Serialize)]
+pub struct GetPrTextOutput { pub diff: Option<String>, pub patch: Option<String>, pub meta: Meta, #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<ErrorShape> }
