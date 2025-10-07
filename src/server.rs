@@ -6,8 +6,8 @@ use log::{debug, info};
 // use reqwest::header::HeaderMap; // not needed currently
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::io::{self, BufRead, BufReader, Write};
 use std::fs::{File, OpenOptions};
+use std::io::{self, BufRead, BufReader, Write};
 use std::sync::{Mutex, OnceLock};
 
 // Minimal diagnostics helper: writes to stderr and optionally to a file if MCP_DIAG_LOG is set.
@@ -123,7 +123,10 @@ pub fn run_stdio_server() -> anyhow::Result<()> {
     }));
 
     // Diagnostics for startup and handshake
-    diag!("stdio server ready; NDJSON mode; protocol={}", PROTOCOL_VERSION);
+    diag!(
+        "stdio server ready; NDJSON mode; protocol={}",
+        PROTOCOL_VERSION
+    );
 
     let mut line = String::new();
     loop {
@@ -134,8 +137,14 @@ pub fn run_stdio_server() -> anyhow::Result<()> {
             break;
         }
         let raw = line.trim_end_matches(['\r', '\n']).to_string();
-        if raw.is_empty() { continue; }
-        diag!("stdin line bytes={} first100={}", raw.len(), &raw.chars().take(100).collect::<String>());
+        if raw.is_empty() {
+            continue;
+        }
+        diag!(
+            "stdin line bytes={} first100={}",
+            raw.len(),
+            &raw.chars().take(100).collect::<String>()
+        );
 
         let req: Result<Request, _> = serde_json::from_str(&raw);
         let Some(request) = req.ok() else {
