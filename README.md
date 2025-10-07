@@ -7,11 +7,16 @@ Quickstart:
 - Build: `cargo build`
 - Run (stdio JSON-RPC):
   - Initialize
-    - `echo '{"jsonrpc":"2.0","method":"initialize","id":1}' | cargo run -- --log-level warn`
+    - `printf 'Content-Length: 48\r\n\r\n{"jsonrpc":"2.0","method":"initialize","id":1}' | cargo run -- --log-level warn`
   - Tools list
-    - `echo '{"jsonrpc":"2.0","method":"tools/list","id":2}' | cargo run -- --log-level warn`
+    - `printf 'Content-Length: 42\r\n\r\n{"jsonrpc":"2.0","method":"tools/list","id":2}' | cargo run -- --log-level warn`
   - Call ping
-    - `echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"ping","arguments":{"message":"hello"}},"id":3}' | cargo run -- --log-level warn`
+    - `printf 'Content-Length: 115\r\n\r\n{"jsonrpc":"2.0","method":"tools/call","params":{"name":"ping","arguments":{"message":"hello"}},"id":3}' | cargo run -- --log-level warn`
+
+Inspector CLI
+- You can validate end-to-end using the MCP Inspector:
+  - `npx @modelcontextprotocol/inspector-cli --cli ./target/release/github-mcp --method tools/list`
+  - Expect the response `result.tools` to include the `ping` tool.
 
 Configuration
 - Token: `GITHUB_TOKEN` (fallback `GH_TOKEN`).

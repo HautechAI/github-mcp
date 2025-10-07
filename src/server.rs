@@ -6,7 +6,7 @@ use log::{debug, info};
 // use reqwest::header::HeaderMap; // not needed currently
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::io::{self, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 // uuid::Uuid not used; remove to satisfy clippy
 
 // Minimal JSON-RPC 2.0 types
@@ -72,38 +72,97 @@ pub fn run_stdio_server() -> anyhow::Result<()> {
         "Starting github-mcp stdio server; protocol={}",
         PROTOCOL_VERSION
     );
-    let mut input = String::new();
-    io::stdin().read_to_string(&mut input)?;
-    // Debug aid: print received payload shape to stderr
-    eprintln!(
-        "[github-mcp] stdin bytes={} first20={}",
-        input.len(),
-        &input.chars().take(20).collect::<String>()
-    );
-    // Note: for milestone 1, we accept a single request for simplicity; future work can stream.
-    if input.trim().is_empty() {
-        return Ok(());
-    }
-    let req: Request = match serde_json::from_str(&input) {
-        Ok(r) => r,
-        Err(e) => {
-            let resp = rpc_error(None, -32700, &format!("Parse error: {}", e), None);
-            write_response(&resp)?;
-            return Ok(());
+    let stdin = io::stdin();
+    let mut reader = BufReader::new(stdin.lock());
+    let mut stdout = io::stdout();
+
+    loop {
+        match read_content_length(&mut reader) {
+            Ok(Some(len)) => {
+                let mut buf = vec![0u8; len];
+                if let Err(e) = reader.read_exact(&mut buf) {
+                    eprintln!("[github-mcp] read_exact error: {}", e);
+                    break;
+                }
+                let text = match String::from_utf8(buf) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        let resp = rpc_error(None, -32700, &format!("Invalid UTF-8: {}", e), None);
+                        write_framed_response(&mut stdout, &resp)?;
+                        continue;
+                    }
+                };
+                let req: Result<Request, _> = serde_json::from_str(&text);
+                let Some(request) = req.ok() else {
+                    let resp = rpc_error(None, -32700, "Parse error", None);
+                    write_framed_response(&mut stdout, &resp)?;
+                    continue;
+                };
+                // Ignore notifications (messages without id)
+                if request.id.is_none() {
+                    debug!("Ignoring notification method={}", request.method);
+                    continue;
+                }
+                debug!("Received method={}", request.method);
+                let resp = dispatch(request);
+                write_framed_response(&mut stdout, &resp)?;
+            }
+            Ok(None) => {
+                // EOF reached
+                break;
+            }
+            Err(e) => {
+                eprintln!("[github-mcp] framing error: {}", e);
+                break;
+            }
         }
-    };
-    debug!("Received method={}", req.method);
-    let resp = dispatch(req);
-    write_response(&resp)?;
+    }
     Ok(())
 }
 
-fn write_response(resp: &Response) -> anyhow::Result<()> {
-    let mut out = io::stdout();
+fn write_framed_response(out: &mut dyn Write, resp: &Response) -> anyhow::Result<()> {
     let payload = serde_json::to_string(resp)?;
-    writeln!(out, "{}", payload)?;
+    let bytes = payload.as_bytes();
+    write!(out, "Content-Length: {}\r\n\r\n", bytes.len())?;
+    out.write_all(bytes)?;
     out.flush()?;
     Ok(())
+}
+
+fn read_content_length(reader: &mut dyn BufRead) -> io::Result<Option<usize>> {
+    let mut content_length: Option<usize> = None;
+    let mut line = String::new();
+    // Read headers until CRLFCRLF (blank line)
+    loop {
+        line.clear();
+        let n = reader.read_line(&mut line)?;
+        if n == 0 {
+            // EOF before any header
+            return Ok(None);
+        }
+        // Normalize to trim trailing \r\n
+        let trimmed = line.trim_end_matches(['\r', '\n']);
+        if trimmed.is_empty() {
+            break;
+        }
+        // Case-insensitive header name match
+        if let Some(rest) = trimmed.strip_prefix("Content-Length:")
+            .or_else(|| trimmed.strip_prefix("content-length:"))
+        {
+            let v = rest.trim();
+            if let Ok(len) = v.parse::<usize>() {
+                content_length = Some(len);
+            }
+        }
+        // Ignore other headers
+    }
+    match content_length {
+        Some(len) => Ok(Some(len)),
+        None => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Missing Content-Length header",
+        )),
+    }
 }
 
 fn dispatch(req: Request) -> Response {
@@ -125,10 +184,13 @@ fn handle_initialize(id: Option<Id>) -> Response {
     rpc_ok(
         id,
         serde_json::json!({
+            "protocolVersion": PROTOCOL_VERSION,
             "server": {
                 "name": "github-mcp",
                 "version": env!("CARGO_PKG_VERSION"),
-                "protocol": PROTOCOL_VERSION,
+            },
+            "capabilities": {
+                "tools": {}
             }
         }),
     )

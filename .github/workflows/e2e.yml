@@ -1,0 +1,28 @@
+name: E2E (MCP Inspector)
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    name: Inspector tools/list
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Lint (clippy)
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Build (release)
+        run: cargo build --release --locked
+      - name: Inspector tools/list
+        run: |
+          npm -g i @modelcontextprotocol/inspector-cli@latest
+          npx @modelcontextprotocol/inspector-cli --cli ./target/release/github-mcp --method tools/list > out.json
+          cat out.json
+          node -e 'const o=require("./out.json"); if(!o.result||!Array.isArray(o.result.tools)||!o.result.tools.find(t=>t.name==="ping")){console.error("ping tool missing"); process.exit(1)}'
