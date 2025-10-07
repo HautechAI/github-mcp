@@ -1,5 +1,6 @@
 use assert_cmd::Command;
 use httpmock::{Method::GET, Method::POST, MockServer};
+use std::io::Write;
 
 fn run_with_env(req: &serde_json::Value, envs: &[(&str, &str)]) -> anyhow::Result<String> {
     let mut cmd = Command::cargo_bin("github-mcp")?;
@@ -10,7 +11,7 @@ fn run_with_env(req: &serde_json::Value, envs: &[(&str, &str)]) -> anyhow::Resul
     let assert = cmd
         .arg("--log-level")
         .arg("warn")
-        .write_stdin(input)
+        .write_stdin({ let mut b = Vec::new(); writeln!(b, "{}", input).unwrap(); b })
         .assert();
     let output = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
     Ok(output)

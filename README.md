@@ -5,13 +5,19 @@ GitHub MCP server (Rust, stdio JSON-RPC).
 Quickstart:
 - Prereqs: Rust 1.90.0+, cargo; set `GITHUB_TOKEN` or `GH_TOKEN`.
 - Build: `cargo build`
-- Run (stdio JSON-RPC):
+- Run (stdio JSON-RPC, NDJSON framing):
   - Initialize
     - `echo '{"jsonrpc":"2.0","method":"initialize","id":1}' | cargo run -- --log-level warn`
   - Tools list
     - `echo '{"jsonrpc":"2.0","method":"tools/list","id":2}' | cargo run -- --log-level warn`
   - Call ping
     - `echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"ping","arguments":{"message":"hello"}},"id":3}' | cargo run -- --log-level warn`
+
+Inspector CLI
+- You can validate end-to-end using the MCP Inspector:
+  - `npx @modelcontextprotocol/inspector-cli --cli ./target/release/github-mcp --method initialize`
+  - `npx @modelcontextprotocol/inspector-cli --cli ./target/release/github-mcp --method tools/list`
+  - Expect `result.protocolVersion` and that `result.tools` includes `ping`.
 
 Configuration
 - Token: `GITHUB_TOKEN` (fallback `GH_TOKEN`).

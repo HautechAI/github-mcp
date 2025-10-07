@@ -1,4 +1,5 @@
 use assert_cmd::Command;
+use std::io::Write;
 
 fn run(req: &serde_json::Value) -> anyhow::Result<String> {
     let mut cmd = Command::cargo_bin("github-mcp")?;
@@ -6,7 +7,11 @@ fn run(req: &serde_json::Value) -> anyhow::Result<String> {
     let assert = cmd
         .arg("--log-level")
         .arg("warn")
-        .write_stdin(input)
+        .write_stdin({
+            let mut b = Vec::new();
+            writeln!(b, "{}", input).unwrap();
+            b
+        })
         .assert();
     let output = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
     Ok(output)
@@ -21,7 +26,7 @@ fn initialize_and_tools_list() -> anyhow::Result<()> {
         "id": 1
     });
     let out = run(&init_req)?;
-    assert!(out.contains("\"server\""));
+    assert!(out.contains("\"protocolVersion\""));
 
     // tools/list
     let list_req = serde_json::json!({
@@ -31,6 +36,7 @@ fn initialize_and_tools_list() -> anyhow::Result<()> {
     });
     let out = run(&list_req)?;
     assert!(out.contains("\"tools\""));
+    assert!(out.contains("\"ping\""));
 
     // tools/call ping
     let call_req = serde_json::json!({

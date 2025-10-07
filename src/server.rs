@@ -6,8 +6,44 @@ use log::{debug, info};
 // use reqwest::header::HeaderMap; // not needed currently
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::io::{self, Read, Write};
+use std::io::{self, BufRead, BufReader, Write};
+use std::fs::{File, OpenOptions};
+use std::sync::{Mutex, OnceLock};
+
+// Minimal diagnostics helper: writes to stderr and optionally to a file if MCP_DIAG_LOG is set.
+static DIAG_FILE: OnceLock<Option<Mutex<File>>> = OnceLock::new();
+
+fn get_diag_file() -> Option<&'static Mutex<File>> {
+    DIAG_FILE
+        .get_or_init(|| {
+            if let Ok(path) = std::env::var("MCP_DIAG_LOG") {
+                if !path.is_empty() {
+                    if let Ok(f) = OpenOptions::new().create(true).append(true).open(path) {
+                        return Some(Mutex::new(f));
+                    }
+                }
+            }
+            None
+        })
+        .as_ref()
+}
+
+macro_rules! diag {
+    ($($arg:tt)*) => {{
+        // Always to stderr with prefix
+        eprintln!("[github-mcp][diag] {}", format_args!($($arg)*));
+        // Optionally to file
+        if let Some(mf) = get_diag_file() {
+            if let Ok(mut f) = mf.lock() {
+                let _ = writeln!(f, "[github-mcp][diag] {}", format_args!($($arg)*));
+            }
+        }
+    }};
+}
 // uuid::Uuid not used; remove to satisfy clippy
+
+// MCP protocol version we target
+const PROTOCOL_VERSION: &str = "2024-11-05";
 
 // Minimal JSON-RPC 2.0 types
 #[derive(Debug, Serialize, Deserialize)]
@@ -72,37 +108,73 @@ pub fn run_stdio_server() -> anyhow::Result<()> {
         "Starting github-mcp stdio server; protocol={}",
         PROTOCOL_VERSION
     );
-    let mut input = String::new();
-    io::stdin().read_to_string(&mut input)?;
-    // Debug aid: print received payload shape to stderr
-    eprintln!(
-        "[github-mcp] stdin bytes={} first20={}",
-        input.len(),
-        &input.chars().take(20).collect::<String>()
-    );
-    // Note: for milestone 1, we accept a single request for simplicity; future work can stream.
-    if input.trim().is_empty() {
-        return Ok(());
-    }
-    let req: Request = match serde_json::from_str(&input) {
-        Ok(r) => r,
-        Err(e) => {
-            let resp = rpc_error(None, -32700, &format!("Parse error: {}", e), None);
-            write_response(&resp)?;
-            return Ok(());
+    let stdin = io::stdin();
+    let mut reader = BufReader::new(stdin.lock());
+    let mut stdout = io::stdout();
+
+    // Panic hook to log early exits/panics
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!("[github-mcp][diag] panic: {}", info);
+        if let Some(mf) = get_diag_file() {
+            if let Ok(mut f) = mf.lock() {
+                let _ = writeln!(f, "[github-mcp][diag] panic: {}", info);
+            }
         }
-    };
-    debug!("Received method={}", req.method);
-    let resp = dispatch(req);
-    write_response(&resp)?;
+    }));
+
+    // Diagnostics for startup and handshake
+    diag!("stdio server ready; NDJSON mode; protocol={}", PROTOCOL_VERSION);
+
+    let mut line = String::new();
+    loop {
+        line.clear();
+        let n = reader.read_line(&mut line)?;
+        if n == 0 {
+            diag!("stdin EOF; exiting main loop");
+            break;
+        }
+        let raw = line.trim_end_matches(['\r', '\n']).to_string();
+        if raw.is_empty() { continue; }
+        diag!("stdin line bytes={} first100={}", raw.len(), &raw.chars().take(100).collect::<String>());
+
+        let req: Result<Request, _> = serde_json::from_str(&raw);
+        let Some(request) = req.ok() else {
+            diag!("JSON parse error; sending -32700");
+            let resp = rpc_error(None, -32700, "Parse error", None);
+            write_json_line_response(&mut stdout, &resp)?;
+            continue;
+        };
+
+        // Log and ignore notifications
+        if request.id.is_none() {
+            if request.method == "initialized" || request.method == "notifications/initialized" {
+                diag!("initialized notification received");
+            } else {
+                diag!("notification ignored; method={}", request.method);
+            }
+            continue; // no response to notifications
+        }
+
+        debug!("Received method={}", request.method);
+        if request.method == "initialize" {
+            diag!("initialize request received");
+        }
+        let resp = dispatch(request);
+        write_json_line_response(&mut stdout, &resp)?;
+    }
     Ok(())
 }
 
-fn write_response(resp: &Response) -> anyhow::Result<()> {
-    let mut out = io::stdout();
+fn write_json_line_response(out: &mut dyn Write, resp: &Response) -> anyhow::Result<()> {
     let payload = serde_json::to_string(resp)?;
     writeln!(out, "{}", payload)?;
     out.flush()?;
+    diag!(
+        "response written; json_len={} has_error={} has_result={}",
+        payload.len(),
+        resp.error.is_some(),
+        resp.result.is_some()
+    );
     Ok(())
 }
 
@@ -122,13 +194,17 @@ fn dispatch(req: Request) -> Response {
 }
 
 fn handle_initialize(id: Option<Id>) -> Response {
+    diag!("handle_initialize invoked");
     rpc_ok(
         id,
         serde_json::json!({
-            "server": {
+            "protocolVersion": PROTOCOL_VERSION,
+            "serverInfo": {
                 "name": "github-mcp",
                 "version": env!("CARGO_PKG_VERSION"),
-                "protocol": PROTOCOL_VERSION,
+            },
+            "capabilities": {
+                "tools": {}
             }
         }),
     )
