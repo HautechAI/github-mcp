@@ -1,15 +1,17 @@
 #![allow(non_snake_case)] // GraphQL/REST field names map directly; keep original casing
-use crate::config::Config;
-use crate::http::{self};
-use crate::tools::*;
-use crate::mcp::mcp_wrap;
+use std::fs::{File, OpenOptions};
+use std::io::{self, BufRead, BufReader, Write};
+use std::sync::{Mutex, OnceLock};
+
 use log::{debug, info};
 // use reqwest::header::HeaderMap; // not needed currently
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::fs::{File, OpenOptions};
-use std::io::{self, BufRead, BufReader, Write};
-use std::sync::{Mutex, OnceLock};
+
+use crate::config::Config;
+use crate::http;
+use crate::mcp::mcp_wrap;
+use crate::tools::*;
 
 // Minimal diagnostics helper: writes to stderr and optionally to a file if MCP_DIAG_LOG is set.
 static DIAG_FILE: OnceLock<Option<Mutex<File>>> = OnceLock::new();
