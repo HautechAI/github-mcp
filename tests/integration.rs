@@ -41,7 +41,11 @@ fn initialize_and_tools_list() -> anyhow::Result<()> {
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     if let Some(result) = v.get("result") {
         if let Some(nc) = result.get("nextCursor") {
-            assert!(nc.is_string(), "nextCursor must be a string when present; got: {}", nc);
+            assert!(
+                nc.is_string(),
+                "nextCursor must be a string when present; got: {}",
+                nc
+            );
         }
     }
 
