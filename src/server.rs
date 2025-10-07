@@ -9,6 +9,37 @@ use serde_json::Value;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::fs::{File, OpenOptions};
 use std::sync::{Mutex, OnceLock};
+
+// Minimal diagnostics helper: writes to stderr and optionally to a file if MCP_DIAG_LOG is set.
+static DIAG_FILE: OnceLock<Option<Mutex<File>>> = OnceLock::new();
+
+fn get_diag_file() -> Option<&'static Mutex<File>> {
+    DIAG_FILE
+        .get_or_init(|| {
+            if let Ok(path) = std::env::var("MCP_DIAG_LOG") {
+                if !path.is_empty() {
+                    if let Ok(f) = OpenOptions::new().create(true).append(true).open(path) {
+                        return Some(Mutex::new(f));
+                    }
+                }
+            }
+            None
+        })
+        .as_ref()
+}
+
+macro_rules! diag {
+    ($($arg:tt)*) => {{
+        // Always to stderr with prefix
+        eprintln!("[github-mcp][diag] {}", format_args!($($arg)*));
+        // Optionally to file
+        if let Some(mf) = get_diag_file() {
+            if let Ok(mut f) = mf.lock() {
+                let _ = writeln!(f, "[github-mcp][diag] {}", format_args!($($arg)*));
+            }
+        }
+    }};
+}
 // uuid::Uuid not used; remove to satisfy clippy
 
 // Minimal JSON-RPC 2.0 types
@@ -222,35 +253,6 @@ fn handle_initialize(id: Option<Id>) -> Response {
             }
         }),
     )
-}
-
-// Minimal diagnostics helper: writes to stderr and optionally to a file if MCP_DIAG_LOG is set.
-static DIAG_FILE: OnceLock<Option<Mutex<File>>> = OnceLock::new();
-
-fn get_diag_file() -> Option<&'static Mutex<File>> {
-    DIAG_FILE.get_or_init(|| {
-        if let Ok(path) = std::env::var("MCP_DIAG_LOG") {
-            if !path.is_empty() {
-                if let Ok(f) = OpenOptions::new().create(true).append(true).open(path) {
-                    return Some(Mutex::new(f));
-                }
-            }
-        }
-        None
-    }).as_ref()
-}
-
-macro_rules! diag {
-    ($($arg:tt)*) => {{
-        // Always to stderr with prefix
-        eprintln!(concat!("[github-mcp][diag] ", $($arg)*));
-        // Optionally to file
-        if let Some(mf) = get_diag_file() {
-            if let Ok(mut f) = mf.lock() {
-                let _ = writeln!(f, concat!("[github-mcp][diag] ", $($arg)*));
-            }
-        }
-    }};
 }
 
 fn handle_tools_list(id: Option<Id>) -> Response {
