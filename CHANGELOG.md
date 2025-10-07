@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file by Release Please.
 
+## [0.2.0](https://github.com/HautechAI/github-mcp/compare/v0.1.5...v0.2.0) (2025-10-07)
+
+
+### Features
+
+* **mcp:** MCP-compliant tool result envelope with structuredContent + tests/docs (fix [#45](https://github.com/HautechAI/github-mcp/issues/45)) ([42c27da](https://github.com/HautechAI/github-mcp/commit/42c27da82a239771d3ad6c07381aed0a936d8014))
+* **mcp:** wrap tools/call results in MCP content envelope with structuredContent; add isError flag; update handlers, tests, README; closes [#45](https://github.com/HautechAI/github-mcp/issues/45) ([37cbad0](https://github.com/HautechAI/github-mcp/commit/37cbad0956490859cf5eca3ae59ca98a7ecf4838))
+
 ## [0.1.5](https://github.com/HautechAI/github-mcp/compare/v0.1.4...v0.1.5) (2025-10-07)
 
 
