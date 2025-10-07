@@ -25,6 +25,19 @@ jobs:
         timeout-minutes: 10
         run: |
           npm -g i @modelcontextprotocol/inspector-cli@latest
-          npx @modelcontextprotocol/inspector-cli --cli ./target/release/github-mcp --method tools/list > out.json
-          cat out.json
+          export MCP_DIAG_LOG="$GITHUB_WORKSPACE/mcp-diag.log"
+          # Some inspector versions support --timeout-ms; tolerate if unsupported by defaulting
+          npx @modelcontextprotocol/inspector-cli --cli ./target/release/github-mcp --method tools/list --timeout-ms 20000 > out.json || npx @modelcontextprotocol/inspector-cli --cli ./target/release/github-mcp --method tools/list > out.json
+          if [ -f out.json ]; then cat out.json; else echo "out.json missing"; fi
           node -e 'const o=require("./out.json"); if(!o.result||!Array.isArray(o.result.tools)||!o.result.tools.find(t=>t.name==="ping")){console.error("ping tool missing"); process.exit(1)}'
+      - name: Smoke stdio LF-only
+        run: |
+          node ./scripts/smoke_stdio_lf.js ./target/release/github-mcp
+      - name: Upload MCP diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-diag
+          path: |
+            mcp-diag.log
+            diag-smoke.log

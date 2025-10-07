@@ -7,6 +7,8 @@ use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io::{self, BufRead, BufReader, Read, Write};
+use std::fs::{File, OpenOptions};
+use std::sync::{Mutex, OnceLock};
 // uuid::Uuid not used; remove to satisfy clippy
 
 // Minimal JSON-RPC 2.0 types
@@ -77,24 +79,21 @@ pub fn run_stdio_server() -> anyhow::Result<()> {
     let mut stdout = io::stdout();
 
     // Temporary diagnostics for Inspector E2E debugging
-    eprintln!(
-        "[github-mcp][diag] stdio server ready; waiting for frames (protocol={})",
+    diag!(
+        "stdio server ready; waiting for frames (protocol={})",
         PROTOCOL_VERSION
     );
 
     loop {
         match read_content_length(&mut reader) {
             Ok(Some(len)) => {
-                eprintln!("[github-mcp][diag] header parsed; content-length={}", len);
+                diag!("header parsed; content-length={}", len);
                 let mut buf = vec![0u8; len];
                 if let Err(e) = reader.read_exact(&mut buf) {
-                    eprintln!("[github-mcp] read_exact error: {}", e);
+                    diag!("read_exact error: {}", e);
                     break;
                 }
-                eprintln!(
-                    "[github-mcp][diag] frame body read; bytes={}",
-                    len
-                );
+                diag!("frame body read; bytes={}", len);
                 let text = match String::from_utf8(buf) {
                     Ok(t) => t,
                     Err(e) => {
@@ -105,10 +104,7 @@ pub fn run_stdio_server() -> anyhow::Result<()> {
                 };
                 let req: Result<Request, _> = serde_json::from_str(&text);
                 let Some(request) = req.ok() else {
-                    eprintln!(
-                        "[github-mcp][diag] JSON parse error; payload_len={}",
-                        text.len()
-                    );
+                    diag!("JSON parse error; payload_len={}", text.len());
                     let resp = rpc_error(None, -32700, "Parse error", None);
                     write_framed_response(&mut stdout, &resp)?;
                     continue;
@@ -116,18 +112,11 @@ pub fn run_stdio_server() -> anyhow::Result<()> {
                 // Ignore notifications (messages without id)
                 if request.id.is_none() {
                     debug!("Ignoring notification method={}", request.method);
-                    eprintln!(
-                        "[github-mcp][diag] notification ignored; method={}",
-                        request.method
-                    );
+                    diag!("notification ignored; method={}", request.method);
                     continue;
                 }
                 debug!("Received method={}", request.method);
-                eprintln!(
-                    "[github-mcp][diag] request received; method={} id_present={}",
-                    request.method,
-                    request.id.is_some()
-                );
+                diag!("request received; method={} id_present={}", request.method, request.id.is_some());
                 let resp = dispatch(request);
                 write_framed_response(&mut stdout, &resp)?;
             }
@@ -136,7 +125,7 @@ pub fn run_stdio_server() -> anyhow::Result<()> {
                 break;
             }
             Err(e) => {
-                eprintln!("[github-mcp] framing error: {}", e);
+                diag!("framing error: {}", e);
                 break;
             }
         }
@@ -156,8 +145,8 @@ fn write_framed_response(out: &mut dyn Write, resp: &Response) -> anyhow::Result
     out.write_all(bytes)?;
     out.flush()?;
     // Temporary diagnostics for Inspector E2E debugging
-    eprintln!(
-        "[github-mcp][diag] response written; content-length={} jsonrpc={} has_error={} has_result={}",
+    diag!(
+        "response written; content-length={} jsonrpc={} has_error={} has_result={}",
         bytes.len(),
         resp.jsonrpc,
         resp.error.is_some(),
@@ -169,7 +158,7 @@ fn write_framed_response(out: &mut dyn Write, resp: &Response) -> anyhow::Result
 fn read_content_length(reader: &mut dyn BufRead) -> io::Result<Option<usize>> {
     let mut content_length: Option<usize> = None;
     let mut line = String::new();
-    // Read headers until CRLFCRLF (blank line)
+    // Read headers until blank line: supports both CRLF and LF-only termination
     loop {
         line.clear();
         let n = reader.read_line(&mut line)?;
@@ -180,10 +169,7 @@ fn read_content_length(reader: &mut dyn BufRead) -> io::Result<Option<usize>> {
         // Trim trailing CRLF/LF to normalize line endings
         let trimmed = line.trim_end_matches(['\r', '\n']);
         if trimmed.is_empty() {
-            eprintln!(
-                "[github-mcp][diag] headers end encountered; content-length={:?}",
-                content_length
-            );
+            diag!("headers end encountered; content-length={:?}", content_length);
             break; // end of headers
         }
         // Parse header as case-insensitive: "name: value"
@@ -191,7 +177,7 @@ fn read_content_length(reader: &mut dyn BufRead) -> io::Result<Option<usize>> {
             if name.trim().eq_ignore_ascii_case("Content-Length") {
                 if let Ok(len) = value.trim().parse::<usize>() {
                     content_length = Some(len);
-                    eprintln!("[github-mcp][diag] header Content-Length parsed={}", len);
+                    diag!("header Content-Length parsed={}", len);
                 }
             }
         }
@@ -222,7 +208,7 @@ fn dispatch(req: Request) -> Response {
 }
 
 fn handle_initialize(id: Option<Id>) -> Response {
-    eprintln!("[github-mcp][diag] handle_initialize invoked");
+    diag!("handle_initialize invoked");
     rpc_ok(
         id,
         serde_json::json!({
@@ -236,6 +222,35 @@ fn handle_initialize(id: Option<Id>) -> Response {
             }
         }),
     )
+}
+
+// Minimal diagnostics helper: writes to stderr and optionally to a file if MCP_DIAG_LOG is set.
+static DIAG_FILE: OnceLock<Option<Mutex<File>>> = OnceLock::new();
+
+fn get_diag_file() -> Option<&'static Mutex<File>> {
+    DIAG_FILE.get_or_init(|| {
+        if let Ok(path) = std::env::var("MCP_DIAG_LOG") {
+            if !path.is_empty() {
+                if let Ok(f) = OpenOptions::new().create(true).append(true).open(path) {
+                    return Some(Mutex::new(f));
+                }
+            }
+        }
+        None
+    }).as_ref()
+}
+
+macro_rules! diag {
+    ($($arg:tt)*) => {{
+        // Always to stderr with prefix
+        eprintln!(concat!("[github-mcp][diag] ", $($arg)*));
+        // Optionally to file
+        if let Some(mf) = get_diag_file() {
+            if let Ok(mut f) = mf.lock() {
+                let _ = writeln!(f, concat!("[github-mcp][diag] ", $($arg)*));
+            }
+        }
+    }};
 }
 
 fn handle_tools_list(id: Option<Id>) -> Response {
