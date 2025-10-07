@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file by Release Please.
 
+## [0.1.5](https://github.com/HautechAI/github-mcp/compare/v0.1.4...v0.1.5) (2025-10-07)
+
+
+### Bug Fixes
+
+* **ci:** rustfmt and release checksum line-ending normalization ([#41](https://github.com/HautechAI/github-mcp/issues/41)) ([fbe1005](https://github.com/HautechAI/github-mcp/commit/fbe1005c144e3b64476bb866bf7feef7c8446a01))
+
 ## [0.1.4](https://github.com/HautechAI/github-mcp/compare/v0.1.3...v0.1.4) (2025-10-06)
 
 
