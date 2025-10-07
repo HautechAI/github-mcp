@@ -1,8 +1,6 @@
 use crate::types::RateMeta;
 use serde::{Deserialize, Serialize};
 
-pub const PROTOCOL_VERSION: &str = "2024-11-01"; // align with codex-tools-mcp cadence
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ToolDescriptor {
     pub name: String,
