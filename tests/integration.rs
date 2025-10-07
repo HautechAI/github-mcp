@@ -3,7 +3,7 @@ use std::io::Write;
 
 fn frame(msg: &str) -> Vec<u8> {
     let mut v = Vec::new();
-    write!(v, "Content-Length: {}\r\n\r\n{}", msg.as_bytes().len(), msg).unwrap();
+    write!(v, "Content-Length: {}\r\n\r\n{}", msg.len(), msg).unwrap();
     v
 }
 
