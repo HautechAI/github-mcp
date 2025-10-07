@@ -123,7 +123,12 @@ pub fn run_stdio_server() -> anyhow::Result<()> {
 fn write_framed_response(out: &mut dyn Write, resp: &Response) -> anyhow::Result<()> {
     let payload = serde_json::to_string(resp)?;
     let bytes = payload.as_bytes();
-    write!(out, "Content-Length: {}\r\n\r\n", bytes.len())?;
+    // Include Content-Type for compatibility with some clients
+    write!(
+        out,
+        "Content-Length: {}\r\nContent-Type: application/json\r\n\r\n",
+        bytes.len()
+    )?;
     out.write_all(bytes)?;
     out.flush()?;
     Ok(())
@@ -140,18 +145,17 @@ fn read_content_length(reader: &mut dyn BufRead) -> io::Result<Option<usize>> {
             // EOF before any header
             return Ok(None);
         }
-        // Normalize to trim trailing \r\n
+        // Trim trailing CRLF/LF to normalize line endings
         let trimmed = line.trim_end_matches(['\r', '\n']);
         if trimmed.is_empty() {
-            break;
+            break; // end of headers
         }
-        // Case-insensitive header name match
-        if let Some(rest) = trimmed.strip_prefix("Content-Length:")
-            .or_else(|| trimmed.strip_prefix("content-length:"))
-        {
-            let v = rest.trim();
-            if let Ok(len) = v.parse::<usize>() {
-                content_length = Some(len);
+        // Parse header as case-insensitive: "name: value"
+        if let Some((name, value)) = trimmed.split_once(':') {
+            if name.trim().eq_ignore_ascii_case("Content-Length") {
+                if let Ok(len) = value.trim().parse::<usize>() {
+                    content_length = Some(len);
+                }
             }
         }
         // Ignore other headers
