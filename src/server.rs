@@ -2,6 +2,7 @@
 use crate::config::Config;
 use crate::http::{self};
 use crate::tools::*;
+use crate::mcp::mcp_wrap;
 use log::{debug, info};
 // use reqwest::header::HeaderMap; // not needed currently
 use serde::{Deserialize, Serialize};
@@ -213,7 +214,7 @@ fn handle_initialize(id: Option<Id>) -> Response {
                 "version": env!("CARGO_PKG_VERSION"),
             },
             "capabilities": {
-                "tools": {}
+                "tools": { "listChanged": false }
             }
         }),
     )
@@ -221,7 +222,8 @@ fn handle_initialize(id: Option<Id>) -> Response {
 
 fn handle_tools_list(id: Option<Id>) -> Response {
     let tools = tool_descriptors();
-    rpc_ok(id, serde_json::json!({ "tools": tools }))
+    // Optional nicety: include nextCursor: null for future pagination compatibility
+    rpc_ok(id, serde_json::json!({ "tools": tools, "nextCursor": null }))
 }
 
 #[derive(Deserialize)]
@@ -272,7 +274,9 @@ fn handle_ping(id: Option<Id>, params: Value) -> Response {
         Err(_) => PingInput { message: None },
     };
     let message = input.message.unwrap_or_else(|| "pong".to_string());
-    rpc_ok(id, serde_json::to_value(PingOutput { message }).unwrap())
+    let structured = serde_json::to_value(PingOutput { message: message.clone() }).unwrap();
+    let wrapped = mcp_wrap(structured, Some(message), false);
+    rpc_ok(id, wrapped)
 }
 
 fn enforce_limit(limit: Option<u32>) -> Result<u32, String> {
@@ -359,7 +363,15 @@ fn handle_list_issues(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    // Prefer a short text summary when items present; otherwise serialize JSON
+    let text = out
+        .items
+        .as_ref()
+        .map(|v| format!("{} issues", v.len()));
+    let is_error = out.error.is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn parse_page_cursor(
@@ -478,7 +490,14 @@ fn handle_list_workflows(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = out
+        .items
+        .as_ref()
+        .map(|v| format!("{} workflows", v.len()));
+    let is_error = out.error.is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_list_workflow_runs(id: Option<Id>, params: Value) -> Response {
@@ -590,7 +609,14 @@ fn handle_list_workflow_runs(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = out
+        .items
+        .as_ref()
+        .map(|v| format!("{} workflow runs", v.len()));
+    let is_error = out.error.is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_get_workflow_run(id: Option<Id>, params: Value) -> Response {
@@ -688,7 +714,14 @@ fn handle_get_workflow_run(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = out
+        .item
+        .as_ref()
+        .map(|i| format!("run #{} status {}", i.run_number, i.status));
+    let is_error = out.error.is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_list_workflow_jobs(id: Option<Id>, params: Value) -> Response {
@@ -797,7 +830,14 @@ fn handle_list_workflow_jobs(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = out
+        .items
+        .as_ref()
+        .map(|v| format!("{} jobs", v.len()));
+    let is_error = out.error.is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_get_workflow_job_logs(id: Option<Id>, params: Value) -> Response {
@@ -1014,7 +1054,14 @@ fn handle_get_workflow_job_logs(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = out
+        .logs
+        .as_ref()
+        .map(|s| if out.truncated { format!("{}\n…(truncated)", s) } else { s.clone() });
+    let is_error = out.error.is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_rerun_workflow_run(id: Option<Id>, params: Value) -> Response {
@@ -1114,7 +1161,18 @@ fn handle_rerun_workflow_run(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = Some(if out.ok {
+        match out.queued_run_id {
+            Some(q) => format!("rerun accepted; queued run id {}", q),
+            None => "rerun accepted".to_string(),
+        }
+    } else {
+        "rerun failed".to_string()
+    });
+    let is_error = out.error.is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_rerun_workflow_run_failed(id: Option<Id>, params: Value) -> Response {
@@ -1214,7 +1272,18 @@ fn handle_rerun_workflow_run_failed(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = Some(if out.ok {
+        match out.queued_run_id {
+            Some(q) => format!("rerun-failed accepted; queued run id {}", q),
+            None => "rerun-failed accepted".to_string(),
+        }
+    } else {
+        "rerun-failed request failed".to_string()
+    });
+    let is_error = out.error.is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_cancel_workflow_run(id: Option<Id>, params: Value) -> Response {
@@ -1310,7 +1379,15 @@ fn handle_cancel_workflow_run(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = Some(if out.ok {
+        "cancel accepted".to_string()
+    } else {
+        "cancel failed".to_string()
+    });
+    let is_error = out.error.is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_list_pr_comments(id: Option<Id>, params: Value) -> Response {
@@ -1365,7 +1442,14 @@ fn handle_list_pr_comments(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(|v| format!("{} comments", v.len()));
+    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn map_side(s: Option<String>) -> Option<String> {
@@ -1448,7 +1532,14 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(|v| format!("{} review comments", v.len()));
+    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_list_pr_review_threads(id: Option<Id>, params: Value) -> Response {
@@ -1516,7 +1607,14 @@ fn handle_list_pr_review_threads(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(|v| format!("{} review threads", v.len()));
+    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_resolve_pr_review_thread(id: Option<Id>, params: Value) -> Response {
@@ -1612,7 +1710,11 @@ fn handle_resolve_pr_review_thread(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = Some(format!("thread resolved: {}", structured.get("is_resolved").and_then(|v| v.as_bool()).unwrap_or(false)));
+    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_unresolve_pr_review_thread(id: Option<Id>, params: Value) -> Response {
@@ -1708,7 +1810,11 @@ fn handle_unresolve_pr_review_thread(id: Option<Id>, params: Value) -> Response 
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = Some(format!("thread resolved: {}", structured.get("is_resolved").and_then(|v| v.as_bool()).unwrap_or(false)));
+    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_list_pr_reviews(id: Option<Id>, params: Value) -> Response {
@@ -1762,7 +1868,14 @@ fn handle_list_pr_reviews(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(|v| format!("{} reviews", v.len()));
+    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_list_pr_commits(id: Option<Id>, params: Value) -> Response {
@@ -1821,7 +1934,14 @@ fn handle_list_pr_commits(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(|v| format!("{} commits", v.len()));
+    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_list_pr_files(id: Option<Id>, params: Value) -> Response {
@@ -1925,7 +2045,14 @@ fn handle_list_pr_files(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(|v| format!("{} files", v.len()));
+    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_get_pr_text(id: Option<Id>, params: Value, is_diff: bool) -> Response {
@@ -2007,7 +2134,19 @@ fn handle_get_pr_text(id: Option<Id>, params: Value, is_diff: bool) -> Response 
             error: err,
         }
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    // For diff/patch endpoints, set content text to the actual text body when available.
+    let text = if is_diff {
+        out.diff.clone()
+    } else {
+        out.patch.clone()
+    };
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_get_pr_status_summary(id: Option<Id>, params: Value) -> Response {
@@ -2075,10 +2214,23 @@ fn handle_get_pr_status_summary(id: Option<Id>, params: Value) -> Response {
         (Some(summary), Meta{ next_cursor: None, has_more: false, rate: None }, None)
     });
     let result = serde_json::to_value(summary).unwrap_or_else(|_| serde_json::json!({"overall_state":"SUCCESS","counts":{"success":0,"pending":0,"failure":0}}));
-    rpc_ok(
-        id,
-        serde_json::json!({"item": result, "meta": meta, "error": err}),
-    )
+    let structured = serde_json::json!({"item": result, "meta": meta, "error": err});
+    // Build a concise summary if possible
+    let text = structured
+        .get("item")
+        .and_then(|i| i.get("counts"))
+        .and_then(|c| {
+            let s = c.get("success").and_then(|v| v.as_i64()).unwrap_or(0);
+            let p = c.get("pending").and_then(|v| v.as_i64()).unwrap_or(0);
+            let f = c.get("failure").and_then(|v| v.as_i64()).unwrap_or(0);
+            Some(format!("status: S={} P={} F={}", s, p, f))
+        });
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_list_pull_requests(id: Option<Id>, params: Value) -> Response {
@@ -2143,7 +2295,14 @@ fn handle_list_pull_requests(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(|v| format!("{} pull requests", v.len()));
+    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_get_pull_request(id: Option<Id>, params: Value) -> Response {
@@ -2197,7 +2356,21 @@ fn handle_get_pull_request(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("item")
+        .and_then(|i| i.get("number"))
+        .and_then(|n| n.as_i64())
+        .zip(
+            structured
+                .get("item")
+                .and_then(|i| i.get("state"))
+                .and_then(|s| s.as_str().map(|s| s.to_string())),
+        )
+        .map(|(n, s)| format!("PR #{} {}", n, s));
+    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_get_issue(id: Option<Id>, params: Value) -> Response {
@@ -2249,7 +2422,21 @@ fn handle_get_issue(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("item")
+        .and_then(|i| i.get("number"))
+        .and_then(|n| n.as_i64())
+        .zip(
+            structured
+                .get("item")
+                .and_then(|i| i.get("state"))
+                .and_then(|s| s.as_str().map(|s| s.to_string())),
+        )
+        .map(|(n, s)| format!("Issue #{} {}", n, s));
+    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_list_issue_comments(id: Option<Id>, params: Value) -> Response {
@@ -2306,5 +2493,12 @@ fn handle_list_issue_comments(id: Option<Id>, params: Value) -> Response {
         meta,
         error: err,
     };
-    rpc_ok(id, serde_json::to_value(out).unwrap())
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(|v| format!("{} comments", v.len()));
+    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
 }

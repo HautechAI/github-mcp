@@ -1,6 +1,7 @@
 mod cli;
 pub mod config;
 pub mod http;
+pub mod mcp;
 mod server;
 mod tools;
 pub mod types;

@@ -38,7 +38,7 @@ fn initialize_and_tools_list() -> anyhow::Result<()> {
     assert!(out.contains("\"tools\""));
     assert!(out.contains("\"ping\""));
 
-    // tools/call ping
+    // tools/call ping (now MCP envelope)
     let call_req = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "tools/call",
@@ -46,6 +46,11 @@ fn initialize_and_tools_list() -> anyhow::Result<()> {
         "id": 3
     });
     let out = run(&call_req)?;
+    // Expect MCP content envelope with text type
+    assert!(out.contains("\"content\""));
+    assert!(out.contains("\"type\":\"text\""));
     assert!(out.contains("hello"));
+    // And structuredContent preserving previous shape
+    assert!(out.contains("\"structuredContent\""));
     Ok(())
 }
