@@ -76,14 +76,25 @@ pub fn run_stdio_server() -> anyhow::Result<()> {
     let mut reader = BufReader::new(stdin.lock());
     let mut stdout = io::stdout();
 
+    // Temporary diagnostics for Inspector E2E debugging
+    eprintln!(
+        "[github-mcp][diag] stdio server ready; waiting for frames (protocol={})",
+        PROTOCOL_VERSION
+    );
+
     loop {
         match read_content_length(&mut reader) {
             Ok(Some(len)) => {
+                eprintln!("[github-mcp][diag] header parsed; content-length={}", len);
                 let mut buf = vec![0u8; len];
                 if let Err(e) = reader.read_exact(&mut buf) {
                     eprintln!("[github-mcp] read_exact error: {}", e);
                     break;
                 }
+                eprintln!(
+                    "[github-mcp][diag] frame body read; bytes={}",
+                    len
+                );
                 let text = match String::from_utf8(buf) {
                     Ok(t) => t,
                     Err(e) => {
@@ -94,6 +105,10 @@ pub fn run_stdio_server() -> anyhow::Result<()> {
                 };
                 let req: Result<Request, _> = serde_json::from_str(&text);
                 let Some(request) = req.ok() else {
+                    eprintln!(
+                        "[github-mcp][diag] JSON parse error; payload_len={}",
+                        text.len()
+                    );
                     let resp = rpc_error(None, -32700, "Parse error", None);
                     write_framed_response(&mut stdout, &resp)?;
                     continue;
@@ -101,9 +116,18 @@ pub fn run_stdio_server() -> anyhow::Result<()> {
                 // Ignore notifications (messages without id)
                 if request.id.is_none() {
                     debug!("Ignoring notification method={}", request.method);
+                    eprintln!(
+                        "[github-mcp][diag] notification ignored; method={}",
+                        request.method
+                    );
                     continue;
                 }
                 debug!("Received method={}", request.method);
+                eprintln!(
+                    "[github-mcp][diag] request received; method={} id_present={}",
+                    request.method,
+                    request.id.is_some()
+                );
                 let resp = dispatch(request);
                 write_framed_response(&mut stdout, &resp)?;
             }
@@ -131,6 +155,14 @@ fn write_framed_response(out: &mut dyn Write, resp: &Response) -> anyhow::Result
     )?;
     out.write_all(bytes)?;
     out.flush()?;
+    // Temporary diagnostics for Inspector E2E debugging
+    eprintln!(
+        "[github-mcp][diag] response written; content-length={} jsonrpc={} has_error={} has_result={}",
+        bytes.len(),
+        resp.jsonrpc,
+        resp.error.is_some(),
+        resp.result.is_some()
+    );
     Ok(())
 }
 
@@ -148,6 +180,10 @@ fn read_content_length(reader: &mut dyn BufRead) -> io::Result<Option<usize>> {
         // Trim trailing CRLF/LF to normalize line endings
         let trimmed = line.trim_end_matches(['\r', '\n']);
         if trimmed.is_empty() {
+            eprintln!(
+                "[github-mcp][diag] headers end encountered; content-length={:?}",
+                content_length
+            );
             break; // end of headers
         }
         // Parse header as case-insensitive: "name: value"
@@ -155,6 +191,7 @@ fn read_content_length(reader: &mut dyn BufRead) -> io::Result<Option<usize>> {
             if name.trim().eq_ignore_ascii_case("Content-Length") {
                 if let Ok(len) = value.trim().parse::<usize>() {
                     content_length = Some(len);
+                    eprintln!("[github-mcp][diag] header Content-Length parsed={}", len);
                 }
             }
         }
@@ -185,6 +222,7 @@ fn dispatch(req: Request) -> Response {
 }
 
 fn handle_initialize(id: Option<Id>) -> Response {
+    eprintln!("[github-mcp][diag] handle_initialize invoked");
     rpc_ok(
         id,
         serde_json::json!({
