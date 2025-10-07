@@ -2257,11 +2257,11 @@ fn handle_get_pr_status_summary(id: Option<Id>, params: Value) -> Response {
     let text = structured
         .get("item")
         .and_then(|i| i.get("counts"))
-        .and_then(|c| {
+        .map(|c| {
             let s = c.get("success").and_then(|v| v.as_i64()).unwrap_or(0);
             let p = c.get("pending").and_then(|v| v.as_i64()).unwrap_or(0);
             let f = c.get("failure").and_then(|v| v.as_i64()).unwrap_or(0);
-            Some(format!("status: S={} P={} F={}", s, p, f))
+            format!("status: S={} P={} F={}", s, p, f)
         });
     let is_error = structured
         .get("error")
