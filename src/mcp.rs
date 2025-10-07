@@ -20,4 +20,3 @@ pub fn mcp_wrap(structured: Value, text_opt: Option<String>, is_error: bool) -> 
     }
     obj
 }
-

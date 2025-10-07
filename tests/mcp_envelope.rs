@@ -45,7 +45,10 @@ fn mcp_envelope_success_and_error() -> anyhow::Result<()> {
         "jsonrpc":"2.0","method":"tools/call","id":2,
         "params":{"name":"list_workflows_light","arguments":{"owner":"o","repo":"r","per_page":10,"page":1}}
     });
-    let out = run_with_env(&req, &[("GITHUB_TOKEN","t"),("GITHUB_API_URL", server.base_url().as_str())])?;
+    let out = run_with_env(
+        &req,
+        &[("GITHUB_TOKEN", "t"), ("GITHUB_API_URL", server.base_url().as_str())],
+    )?;
     // Envelope present and marked as error
     assert!(out.contains("\"content\""));
     assert!(out.contains("\"structuredContent\""));
@@ -54,4 +57,3 @@ fn mcp_envelope_success_and_error() -> anyhow::Result<()> {
     assert!(out.contains("\"error\""));
     Ok(())
 }
-

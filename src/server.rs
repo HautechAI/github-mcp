@@ -225,7 +225,10 @@ fn handle_initialize(id: Option<Id>) -> Response {
 fn handle_tools_list(id: Option<Id>) -> Response {
     let tools = tool_descriptors();
     // Optional nicety: include nextCursor: null for future pagination compatibility
-    rpc_ok(id, serde_json::json!({ "tools": tools, "nextCursor": null }))
+    rpc_ok(
+        id,
+        serde_json::json!({ "tools": tools, "nextCursor": null }),
+    )
 }
 
 #[derive(Deserialize)]
@@ -276,7 +279,10 @@ fn handle_ping(id: Option<Id>, params: Value) -> Response {
         Err(_) => PingInput { message: None },
     };
     let message = input.message.unwrap_or_else(|| "pong".to_string());
-    let structured = serde_json::to_value(PingOutput { message: message.clone() }).unwrap();
+    let structured = serde_json::to_value(PingOutput {
+        message: message.clone(),
+    })
+    .unwrap();
     let wrapped = mcp_wrap(structured, Some(message), false);
     rpc_ok(id, wrapped)
 }
@@ -367,10 +373,7 @@ fn handle_list_issues(id: Option<Id>, params: Value) -> Response {
     };
     let structured = serde_json::to_value(&out).unwrap();
     // Prefer a short text summary when items present; otherwise serialize JSON
-    let text = out
-        .items
-        .as_ref()
-        .map(|v| format!("{} issues", v.len()));
+    let text = out.items.as_ref().map(|v| format!("{} issues", v.len()));
     let is_error = out.error.is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
@@ -493,10 +496,7 @@ fn handle_list_workflows(id: Option<Id>, params: Value) -> Response {
         error: err,
     };
     let structured = serde_json::to_value(&out).unwrap();
-    let text = out
-        .items
-        .as_ref()
-        .map(|v| format!("{} workflows", v.len()));
+    let text = out.items.as_ref().map(|v| format!("{} workflows", v.len()));
     let is_error = out.error.is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
@@ -833,10 +833,7 @@ fn handle_list_workflow_jobs(id: Option<Id>, params: Value) -> Response {
         error: err,
     };
     let structured = serde_json::to_value(&out).unwrap();
-    let text = out
-        .items
-        .as_ref()
-        .map(|v| format!("{} jobs", v.len()));
+    let text = out.items.as_ref().map(|v| format!("{} jobs", v.len()));
     let is_error = out.error.is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
@@ -1057,10 +1054,13 @@ fn handle_get_workflow_job_logs(id: Option<Id>, params: Value) -> Response {
         error: err,
     };
     let structured = serde_json::to_value(&out).unwrap();
-    let text = out
-        .logs
-        .as_ref()
-        .map(|s| if out.truncated { format!("{}\n…(truncated)", s) } else { s.clone() });
+    let text = out.logs.as_ref().map(|s| {
+        if out.truncated {
+            format!("{}\n…(truncated)", s)
+        } else {
+            s.clone()
+        }
+    });
     let is_error = out.error.is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
