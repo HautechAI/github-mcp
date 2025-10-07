@@ -47,7 +47,10 @@ fn mcp_envelope_success_and_error() -> anyhow::Result<()> {
     });
     let out = run_with_env(
         &req,
-        &[("GITHUB_TOKEN", "t"), ("GITHUB_API_URL", server.base_url().as_str())],
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
     )?;
     // Envelope present and marked as error
     assert!(out.contains("\"content\""));

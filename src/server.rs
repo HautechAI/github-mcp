@@ -1722,7 +1722,13 @@ fn handle_resolve_pr_review_thread(id: Option<Id>, params: Value) -> Response {
         error: err,
     };
     let structured = serde_json::to_value(&out).unwrap();
-    let text = Some(format!("thread resolved: {}", structured.get("is_resolved").and_then(|v| v.as_bool()).unwrap_or(false)));
+    let text = Some(format!(
+        "thread resolved: {}",
+        structured
+            .get("is_resolved")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    ));
     let is_error = structured
         .get("error")
         .and_then(|e| if e.is_null() { None } else { Some(e) })
@@ -1825,7 +1831,13 @@ fn handle_unresolve_pr_review_thread(id: Option<Id>, params: Value) -> Response 
         error: err,
     };
     let structured = serde_json::to_value(&out).unwrap();
-    let text = Some(format!("thread resolved: {}", structured.get("is_resolved").and_then(|v| v.as_bool()).unwrap_or(false)));
+    let text = Some(format!(
+        "thread resolved: {}",
+        structured
+            .get("is_resolved")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    ));
     let is_error = structured
         .get("error")
         .and_then(|e| if e.is_null() { None } else { Some(e) })
