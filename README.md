@@ -12,12 +12,13 @@ Quickstart:
     - `echo '{"jsonrpc":"2.0","method":"tools/list","id":2}' | cargo run -- --log-level warn`
   - Call ping
     - `echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"ping","arguments":{"message":"hello"}},"id":3}' | cargo run -- --log-level warn`
+      - Note: responses now follow MCP tool result envelope with `content` and `structuredContent`.
 
 Inspector CLI
 - You can validate end-to-end using the MCP Inspector:
   - `npx @modelcontextprotocol/inspector-cli --cli ./target/release/github-mcp --method initialize`
   - `npx @modelcontextprotocol/inspector-cli --cli ./target/release/github-mcp --method tools/list`
-  - Expect `result.protocolVersion` and that `result.tools` includes `ping`.
+  - Expect `result.protocolVersion` and MCP tool result envelopes with `content` and `structuredContent`.
 
 Configuration
 - Token: `GITHUB_TOKEN` (fallback `GH_TOKEN`).
@@ -52,3 +53,21 @@ Notes
 - TODO:
   - GraphQL `rateLimit` is included where feasible without complicating queries; some queries may still omit it.
   - REST pagination relies on Link headers; when GitHub omits Link for small result sets, `has_more` may be false with no `next_cursor`.
+
+MCP response envelope (breaking change)
+- tools/call results are wrapped:
+  - `content`: array with one `{type:"text", text:"..."}` block for human-friendly display.
+  - `structuredContent`: previous structured JSON payload preserved for programmatic clients.
+  - `isError`: present and `true` when a tool-level error is included in `structuredContent.error`.
+- Example (ping):
+```
+{
+  "jsonrpc":"2.0",
+  "id":3,
+  "result":{
+    "content":[{"type":"text","text":"hello"}],
+    "structuredContent":{"message":"hello"}
+  }
+}
+```
+- Programmatic clients should switch to reading `result.structuredContent` and treat `result.content[0].text` as a display hint.

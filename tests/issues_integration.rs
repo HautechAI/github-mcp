@@ -57,6 +57,7 @@ fn list_issues_happy_path() -> anyhow::Result<()> {
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
+    assert!(out.contains("\"structuredContent\""));
     assert!(out.contains("\"items\""));
     assert!(out.contains("\"author_login\":\"alice\""));
     Ok(())
@@ -87,6 +88,7 @@ fn get_issue_happy_path() -> anyhow::Result<()> {
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
+    assert!(out.contains("\"structuredContent\""));
     assert!(out.contains("\"item\""));
     assert!(out.contains("\"author_login\":\"alice\""));
     Ok(())
@@ -117,6 +119,7 @@ fn list_issue_comments_happy_path() -> anyhow::Result<()> {
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
+    assert!(out.contains("\"structuredContent\""));
     assert!(out.contains("\"items\""));
     assert!(out.contains("\"author_login\":\"bob\""));
     Ok(())

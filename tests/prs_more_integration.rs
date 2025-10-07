@@ -46,6 +46,7 @@ fn list_pr_comments_plain_happy() -> anyhow::Result<()> {
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
+    assert!(out.contains("\"structuredContent\""));
     assert!(out.contains("\"items\""));
     assert!(out.contains("\"author_login\":\"alice\""));
     Ok(())
@@ -70,7 +71,8 @@ fn get_pr_diff_and_patch_rest_headers() -> anyhow::Result<()> {
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
-    assert!(out.contains("diff-data"));
+    assert!(out.contains("diff-data")); // text content
+    assert!(out.contains("\"structuredContent\""));
 
     let _m2 = server.mock(|when, then| {
         when.method(GET).path("/repos/o/r/pulls/2");
@@ -85,5 +87,6 @@ fn get_pr_diff_and_patch_rest_headers() -> anyhow::Result<()> {
         ],
     )?;
     assert!(out2.contains("patch-data"));
+    assert!(out2.contains("\"structuredContent\""));
     Ok(())
 }

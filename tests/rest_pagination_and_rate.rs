@@ -45,6 +45,7 @@ fn rest_pagination_link_headers() -> anyhow::Result<()> {
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
+    assert!(out.contains("\"structuredContent\""));
     assert!(out.contains("\"has_more\":true"));
     assert!(out.contains("next_cursor"));
     Ok(())

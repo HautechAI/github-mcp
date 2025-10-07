@@ -46,6 +46,7 @@ fn list_pull_requests_happy_path() -> anyhow::Result<()> {
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
+    assert!(out.contains("\"structuredContent\""));
     assert!(out.contains("\"items\""));
     assert!(out.contains("\"author_login\":\"alice\""));
     Ok(())
@@ -76,6 +77,7 @@ fn get_pull_request_happy_path() -> anyhow::Result<()> {
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
+    assert!(out.contains("\"structuredContent\""));
     assert!(out.contains("\"item\""));
     assert!(out.contains("\"author_login\":\"alice\""));
     Ok(())

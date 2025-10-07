@@ -57,6 +57,10 @@ fn get_workflow_job_logs_redirect_zip_tail_and_timestamps() -> anyhow::Result<()
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
+    // Expect MCP envelope: content has text, structuredContent carries logs field
+    assert!(out.contains("\"content\""));
+    assert!(out.contains("\"type\":\"text\""));
+    assert!(out.contains("\"structuredContent\""));
     assert!(out.contains("\"logs\""));
     assert!(out.contains("line3"));
     assert!(out.contains(":")); // likely timestamp separator present
@@ -104,8 +108,11 @@ fn rerun_and_cancel_endpoints() -> anyhow::Result<()> {
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
-    assert!(out1.contains("\"ok\":true"));
-    assert!(out2.contains("\"ok\":true"));
-    assert!(out3.contains("\"ok\":true"));
+    // MCP envelope present; structuredContent contains ok:true
+    for o in [&out1, &out2, &out3] {
+        assert!(o.contains("\"content\""));
+        assert!(o.contains("\"structuredContent\""));
+        assert!(o.contains("\"ok\":true"));
+    }
     Ok(())
 }
