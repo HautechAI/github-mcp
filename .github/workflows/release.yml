@@ -167,9 +167,14 @@ jobs:
             exit 1
           fi
           # Combine and sort lines for order-agnostic result
-          cat "${files[@]}" | sort -u > dist/SHA256SUMS.txt
-          # Normalize potential CRLF line endings to LF to avoid stray \r in filenames
-          sed -i 's/\r$//' dist/SHA256SUMS.txt
+          # Normalize CRLF to LF then combine and sort uniquely
+          tmp_combined=$(mktemp)
+          for f in "${files[@]}"; do
+            # Use sed portable in-place via temp file to strip CR prior to concat
+            sed 's/\r$//' "$f" >> "$tmp_combined"
+          done
+          sort -u "$tmp_combined" > dist/SHA256SUMS.txt
+          rm -f "$tmp_combined"
           echo "Combined checksums count:" && wc -l dist/SHA256SUMS.txt
           # Ensure only one SHA256SUMS.txt exists at root
           if [[ ! -f dist/SHA256SUMS.txt ]]; then echo "Missing dist/SHA256SUMS.txt" >&2; exit 1; fi
@@ -209,7 +214,8 @@ jobs:
             exit 1
           fi
           # Compare filenames in checksums vs actual binaries
-          sort <(awk '{print $2}' dist/SHA256SUMS.txt | xargs -n1 basename | sort -u) -o /tmp/check_names.txt
+          # Strip any stray CRs from combined file before extracting names
+          awk '{print $2}' dist/SHA256SUMS.txt | sed 's/\r$//' | xargs -n1 basename | sort -u -o /tmp/check_names.txt
           sort <(for b in "${bins[@]}"; do basename "$b"; done | sort -u) -o /tmp/bin_names.txt
           if ! diff -u /tmp/bin_names.txt /tmp/check_names.txt; then
             echo "Mismatch between binaries and checksum entries" >&2

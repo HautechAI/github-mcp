@@ -11,7 +11,11 @@ fn run_with_env(req: &serde_json::Value, envs: &[(&str, &str)]) -> anyhow::Resul
     let assert = cmd
         .arg("--log-level")
         .arg("warn")
-        .write_stdin({ let mut b = Vec::new(); writeln!(b, "{}", input).unwrap(); b })
+        .write_stdin({
+            let mut b = Vec::new();
+            writeln!(b, "{}", input).unwrap();
+            b
+        })
         .assert();
     let output = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
     Ok(output)
