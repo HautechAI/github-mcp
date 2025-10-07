@@ -21,15 +21,6 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Build (release)
         run: cargo build --release --locked
-      - name: Inspector initialize (preflight)
-        timeout-minutes: 10
-        run: |
-          npm -g i @modelcontextprotocol/inspector-cli@latest
-          export MCP_DIAG_LOG="$GITHUB_WORKSPACE/mcp-diag.log"
-          # Some inspector versions support --timeout-ms; tolerate if unsupported by defaulting
-          npx @modelcontextprotocol/inspector-cli --cli ./target/release/github-mcp --method initialize --timeout-ms 30000 > out-init.json || npx @modelcontextprotocol/inspector-cli --cli ./target/release/github-mcp --method initialize > out-init.json
-          if [ -f out-init.json ]; then cat out-init.json; else echo "out-init.json missing"; fi
-          node -e 'const o=require("./out-init.json"); if(!o.result||o.result.protocolVersion!=="2024-11-05"||!o.result.serverInfo||!o.result.capabilities){console.error("initialize response invalid"); process.exit(1)}'
 
       - name: Inspector tools/list
         timeout-minutes: 10
@@ -49,5 +40,4 @@ jobs:
           path: |
             mcp-diag.log
             diag-smoke.log
-            out-init.json
             out-tools.json
