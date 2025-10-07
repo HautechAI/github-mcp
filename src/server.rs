@@ -1449,7 +1449,10 @@ fn handle_list_pr_comments(id: Option<Id>, params: Value) -> Response {
         .get("items")
         .and_then(|v| v.as_array())
         .map(|v| format!("{} comments", v.len()));
-    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
@@ -1539,7 +1542,10 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
         .get("items")
         .and_then(|v| v.as_array())
         .map(|v| format!("{} review comments", v.len()));
-    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
@@ -1614,7 +1620,10 @@ fn handle_list_pr_review_threads(id: Option<Id>, params: Value) -> Response {
         .get("items")
         .and_then(|v| v.as_array())
         .map(|v| format!("{} review threads", v.len()));
-    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
@@ -1714,7 +1723,10 @@ fn handle_resolve_pr_review_thread(id: Option<Id>, params: Value) -> Response {
     };
     let structured = serde_json::to_value(&out).unwrap();
     let text = Some(format!("thread resolved: {}", structured.get("is_resolved").and_then(|v| v.as_bool()).unwrap_or(false)));
-    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
@@ -1814,7 +1826,10 @@ fn handle_unresolve_pr_review_thread(id: Option<Id>, params: Value) -> Response 
     };
     let structured = serde_json::to_value(&out).unwrap();
     let text = Some(format!("thread resolved: {}", structured.get("is_resolved").and_then(|v| v.as_bool()).unwrap_or(false)));
-    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
@@ -1875,7 +1890,10 @@ fn handle_list_pr_reviews(id: Option<Id>, params: Value) -> Response {
         .get("items")
         .and_then(|v| v.as_array())
         .map(|v| format!("{} reviews", v.len()));
-    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
@@ -1941,7 +1959,10 @@ fn handle_list_pr_commits(id: Option<Id>, params: Value) -> Response {
         .get("items")
         .and_then(|v| v.as_array())
         .map(|v| format!("{} commits", v.len()));
-    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
@@ -2052,7 +2073,10 @@ fn handle_list_pr_files(id: Option<Id>, params: Value) -> Response {
         .get("items")
         .and_then(|v| v.as_array())
         .map(|v| format!("{} files", v.len()));
-    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
@@ -2302,7 +2326,10 @@ fn handle_list_pull_requests(id: Option<Id>, params: Value) -> Response {
         .get("items")
         .and_then(|v| v.as_array())
         .map(|v| format!("{} pull requests", v.len()));
-    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
@@ -2370,7 +2397,10 @@ fn handle_get_pull_request(id: Option<Id>, params: Value) -> Response {
                 .and_then(|s| s.as_str().map(|s| s.to_string())),
         )
         .map(|(n, s)| format!("PR #{} {}", n, s));
-    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
@@ -2436,7 +2466,10 @@ fn handle_get_issue(id: Option<Id>, params: Value) -> Response {
                 .and_then(|s| s.as_str().map(|s| s.to_string())),
         )
         .map(|(n, s)| format!("Issue #{} {}", n, s));
-    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
@@ -2500,7 +2533,10 @@ fn handle_list_issue_comments(id: Option<Id>, params: Value) -> Response {
         .get("items")
         .and_then(|v| v.as_array())
         .map(|v| format!("{} comments", v.len()));
-    let is_error = structured.get("error").and_then(|e| if e.is_null() { None } else { Some(e) }).is_some();
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
