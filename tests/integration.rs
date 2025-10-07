@@ -37,6 +37,17 @@ fn initialize_and_tools_list() -> anyhow::Result<()> {
     let out = run(&list_req)?;
     assert!(out.contains("\"tools\""));
     assert!(out.contains("\"ping\""));
+    // Ensure nextCursor is absent or a string (never null)
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    if let Some(result) = v.get("result") {
+        if let Some(nc) = result.get("nextCursor") {
+            assert!(
+                nc.is_string(),
+                "nextCursor must be a string when present; got: {}",
+                nc
+            );
+        }
+    }
 
     // tools/call ping (now MCP envelope)
     let call_req = serde_json::json!({

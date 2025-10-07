@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file by Release Please.
 
+## [0.2.1](https://github.com/HautechAI/github-mcp/compare/v0.2.0...v0.2.1) (2025-10-07)
+
+
+### Bug Fixes
+
+* tools/list: omit nextCursor when not paginating to align with MCP Inspector schema; add test asserting nextCursor is absent or a string; consolidate E2E into CI workflow (fix [#48](https://github.com/HautechAI/github-mcp/issues/48))
+
 ## [0.2.0](https://github.com/HautechAI/github-mcp/compare/v0.1.5...v0.2.0) (2025-10-07)
 
 
