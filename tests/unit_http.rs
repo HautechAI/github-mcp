@@ -1,6 +1,7 @@
 // remove unused import to satisfy clippy
 use github_mcp::http::{
-    decode_rest_cursor, encode_rest_cursor, extract_rate_from_rest, map_status_to_error, RestCursor,
+    decode_rest_cursor, encode_path_segment, encode_rest_cursor, extract_rate_from_rest,
+    map_status_to_error, RestCursor,
 };
 use reqwest::header::HeaderMap;
 
@@ -33,4 +34,12 @@ fn rest_rate_headers() {
     assert_eq!(rate.remaining, Some(4999));
     assert_eq!(rate.used, Some(1));
     assert!(rate.reset_at.is_some());
+}
+
+#[test]
+fn url_path_segment_encoding() {
+    // Spaces, slash, percent and unicode should be percent-encoded
+    assert_eq!(encode_path_segment("Prod Env/Blue%"), "Prod%20Env%2FBlue%25");
+    // Unreserved characters remain as-is
+    assert_eq!(encode_path_segment("abc-._~123"), "abc-._~123");
 }
