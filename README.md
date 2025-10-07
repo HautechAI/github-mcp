@@ -102,7 +102,7 @@ mcpServers:
 VS Code Copilot Chat (MCP)
 - Config locations
   - Workspace: `.vscode/mcp.json`
-  - User: use Command Palette → “MCP: Open User Configuration” (creates `mcp.json` under your VS Code user folder)
+  - User: use Command Palette -> "MCP: Open User Configuration" (creates `mcp.json` under your VS Code user folder)
     - macOS: `~/Library/Application Support/Code/User/mcp.json`
     - Linux: `~/.config/Code/User/mcp.json`
     - Windows: `%APPDATA%\Code\User\mcp.json`
@@ -129,7 +129,7 @@ VS Code Copilot Chat (MCP)
 }
 ```
 - Optional: Enable discovery of Claude Desktop config via settings.json: `{ "chat.mcp.discovery.enabled": true }`.
-- Reload: Save `mcp.json`, then click the “Start” code lens in the editor or use Command Palette → “MCP: Start Server”. Open Copilot Chat and switch to Agent mode.
+- Reload: Save `mcp.json`, then click the "Start" code lens in the editor or use Command Palette -> "MCP: Start Server". Open Copilot Chat and switch to Agent mode.
 - Docs: https://docs.github.com/copilot/customizing-copilot/using-model-context-protocol/extending-copilot-chat-with-mcp
 
 Server invocation and auth (for all clients)
