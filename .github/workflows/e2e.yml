@@ -30,19 +30,24 @@ jobs:
           if [ -f out-tools.json ]; then cat out-tools.json; else echo "out-tools.json missing"; fi
           # Validate tools/list succeeded and includes a stable GitHub tool.
           # Note: MCP "ping" is a base method (not a tool) per spec; Inspector cannot call arbitrary JSON-RPC methods as tools.
-          node -e '
-            const o = require("./out-tools.json");
-            if (!o.result || !Array.isArray(o.result.tools)) {
-              console.error("invalid tools/list result");
-              process.exit(1);
-            }
-            const names = o.result.tools.map(t => t && t.name).filter(Boolean);
-            const ok = names.includes("list_issues") || names.includes("get_issue");
-            if (!ok) {
-              console.error("expected GitHub tool missing: list_issues or get_issue");
-              process.exit(1);
-            }
-          '
+          node - <<'NODE'
+          const fs=require('fs');
+          const o=JSON.parse(fs.readFileSync('out-tools.json','utf8'));
+          const tools = Array.isArray(o?.result?.tools) ? o.result.tools
+                       : Array.isArray(o?.tools) ? o.tools
+                       : Array.isArray(o) ? o
+                       : null;
+          if(!Array.isArray(tools) || tools.length===0) {
+            console.error('invalid tools/list result');
+            process.exit(1);
+          }
+          const names = new Set(tools.map(t=>t?.name));
+          if(!(names.has('list_issues') || names.has('get_issue'))) {
+            console.error('expected github tools missing');
+            process.exit(1);
+          }
+          console.log('tools/list OK with', tools.length, 'tools');
+          NODE
       - name: Smoke stdio LF-only
         run: |
           node ./scripts/smoke_stdio_lf.js ./target/release/github-mcp
