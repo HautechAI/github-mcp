@@ -1,46 +1,30 @@
 #!/usr/bin/env node
-// Minimal stdio smoke test: send initialize + tools/list using LF-only header termination
+// Minimal stdio smoke test: send initialize + tools/list using LF-only line endings (NDJSON)
 const { spawn } = require('node:child_process');
 
 const bin = process.argv[2] || './target/release/github-mcp';
 
-function frame(obj) {
-  const payload = Buffer.from(JSON.stringify(obj), 'utf8');
-  // LF-only header termination intentionally
-  const header = Buffer.from(`Content-Length: ${payload.length}\n\n`, 'utf8');
-  return Buffer.concat([header, payload]);
-}
-
 const p = spawn(bin, [], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, MCP_DIAG_LOG: './diag-smoke.log' } });
 
-let stdout = Buffer.alloc(0);
+let stdout = '';
 let stderr = '';
-p.stdout.on('data', d => { stdout = Buffer.concat([stdout, d]); });
-p.stderr.on('data', d => { stderr += d.toString(); });
+p.stdout.on('data', d => { stdout += d.toString('utf8'); });
+p.stderr.on('data', d => { stderr += d.toString('utf8'); });
 
-function readFrame(buf) {
-  // Expect CRLF headers from server; search for \r\n\r\n
-  const sep = Buffer.from('\r\n\r\n');
-  const idx = buf.indexOf(sep);
-  if (idx === -1) return null;
-  const header = buf.slice(0, idx).toString('utf8');
-  const rest = buf.slice(idx + sep.length);
-  const m = /Content-Length:\s*(\d+)/i.exec(header);
-  if (!m) throw new Error('Missing Content-Length in response');
-  const len = parseInt(m[1], 10);
-  if (rest.length < len) return null;
-  const body = rest.slice(0, len).toString('utf8');
-  const remaining = rest.slice(len);
-  return { body: JSON.parse(body), remaining };
-}
-
-function waitFrame(timeoutMs = 5000) {
+function readJsonLine(timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
     const start = Date.now();
     function tick() {
-      const f = readFrame(stdout);
-      if (f) return resolve(f);
-      if (Date.now() - start > timeoutMs) return reject(new Error('timeout waiting for frame'));
+      const idx = stdout.indexOf('\n');
+      if (idx !== -1) {
+        const line = stdout.slice(0, idx);
+        stdout = stdout.slice(idx + 1);
+        if (!line.trim()) return tick();
+        // Ensure no headers appear in output
+        if (/Content-Length:/i.test(line)) return reject(new Error('Unexpected Content-Length header in stdout'));
+        try { return resolve(JSON.parse(line)); } catch (e) { return reject(new Error('Invalid JSON line from server: ' + line)); }
+      }
+      if (Date.now() - start > timeoutMs) return reject(new Error('timeout waiting for JSON line'));
       setTimeout(tick, 10);
     }
     tick();
@@ -48,15 +32,15 @@ function waitFrame(timeoutMs = 5000) {
 }
 
 async function run() {
-  // Send initialize
-  p.stdin.write(frame({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }));
-  const init = await waitFrame();
-  console.log('[smoke] initialize ok:', init.body && init.body.result && init.body.result.protocolVersion);
+  // Send initialize as NDJSON with LF only
+  p.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }) + '\n');
+  const init = await readJsonLine(10000);
+  console.log('[smoke] initialize ok:', init && init.result && init.result.protocolVersion);
 
   // Send tools/list
-  p.stdin.write(frame({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }));
-  const list = await waitFrame();
-  const hasPing = Array.isArray(list.body.result && list.body.result.tools) && list.body.result.tools.find(t => t.name === 'ping');
+  p.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }) + '\n');
+  const list = await readJsonLine(10000);
+  const hasPing = Array.isArray(list.result && list.result.tools) && list.result.tools.find(t => t.name === 'ping');
   console.log('[smoke] tools/list ok, has ping:', !!hasPing);
   process.exit(hasPing ? 0 : 2);
 }
@@ -66,4 +50,3 @@ run().catch(err => {
   console.error('[smoke] stderr:', stderr);
   process.exit(1);
 });
-

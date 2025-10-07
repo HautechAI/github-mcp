@@ -6,7 +6,7 @@ use log::{debug, info};
 // use reqwest::header::HeaderMap; // not needed currently
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::fs::{File, OpenOptions};
 use std::sync::{Mutex, OnceLock};
 
@@ -41,6 +41,9 @@ macro_rules! diag {
     }};
 }
 // uuid::Uuid not used; remove to satisfy clippy
+
+// MCP protocol version we target
+const PROTOCOL_VERSION: &str = "2024-11-05";
 
 // Minimal JSON-RPC 2.0 types
 #[derive(Debug, Serialize, Deserialize)]
@@ -109,118 +112,70 @@ pub fn run_stdio_server() -> anyhow::Result<()> {
     let mut reader = BufReader::new(stdin.lock());
     let mut stdout = io::stdout();
 
-    // Temporary diagnostics for Inspector E2E debugging
-    diag!(
-        "stdio server ready; waiting for frames (protocol={})",
-        PROTOCOL_VERSION
-    );
-
-    loop {
-        match read_content_length(&mut reader) {
-            Ok(Some(len)) => {
-                diag!("header parsed; content-length={}", len);
-                let mut buf = vec![0u8; len];
-                if let Err(e) = reader.read_exact(&mut buf) {
-                    diag!("read_exact error: {}", e);
-                    break;
-                }
-                diag!("frame body read; bytes={}", len);
-                let text = match String::from_utf8(buf) {
-                    Ok(t) => t,
-                    Err(e) => {
-                        let resp = rpc_error(None, -32700, &format!("Invalid UTF-8: {}", e), None);
-                        write_framed_response(&mut stdout, &resp)?;
-                        continue;
-                    }
-                };
-                let req: Result<Request, _> = serde_json::from_str(&text);
-                let Some(request) = req.ok() else {
-                    diag!("JSON parse error; payload_len={}", text.len());
-                    let resp = rpc_error(None, -32700, "Parse error", None);
-                    write_framed_response(&mut stdout, &resp)?;
-                    continue;
-                };
-                // Ignore notifications (messages without id)
-                if request.id.is_none() {
-                    debug!("Ignoring notification method={}", request.method);
-                    diag!("notification ignored; method={}", request.method);
-                    continue;
-                }
-                debug!("Received method={}", request.method);
-                diag!("request received; method={} id_present={}", request.method, request.id.is_some());
-                let resp = dispatch(request);
-                write_framed_response(&mut stdout, &resp)?;
-            }
-            Ok(None) => {
-                // EOF reached
-                break;
-            }
-            Err(e) => {
-                diag!("framing error: {}", e);
-                break;
+    // Panic hook to log early exits/panics
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!("[github-mcp][diag] panic: {}", info);
+        if let Some(mf) = get_diag_file() {
+            if let Ok(mut f) = mf.lock() {
+                let _ = writeln!(f, "[github-mcp][diag] panic: {}", info);
             }
         }
-    }
-    Ok(())
-}
+    }));
 
-fn write_framed_response(out: &mut dyn Write, resp: &Response) -> anyhow::Result<()> {
-    let payload = serde_json::to_string(resp)?;
-    let bytes = payload.as_bytes();
-    // Include Content-Type for compatibility with some clients
-    write!(
-        out,
-        "Content-Length: {}\r\nContent-Type: application/json\r\n\r\n",
-        bytes.len()
-    )?;
-    out.write_all(bytes)?;
-    out.flush()?;
-    // Temporary diagnostics for Inspector E2E debugging
-    diag!(
-        "response written; content-length={} jsonrpc={} has_error={} has_result={}",
-        bytes.len(),
-        resp.jsonrpc,
-        resp.error.is_some(),
-        resp.result.is_some()
-    );
-    Ok(())
-}
+    // Diagnostics for startup and handshake
+    diag!("stdio server ready; NDJSON mode; protocol={}", PROTOCOL_VERSION);
 
-fn read_content_length(reader: &mut dyn BufRead) -> io::Result<Option<usize>> {
-    let mut content_length: Option<usize> = None;
     let mut line = String::new();
-    // Read headers until blank line: supports both CRLF and LF-only termination
     loop {
         line.clear();
         let n = reader.read_line(&mut line)?;
         if n == 0 {
-            // EOF before any header
-            return Ok(None);
+            diag!("stdin EOF; exiting main loop");
+            break;
         }
-        // Trim trailing CRLF/LF to normalize line endings
-        let trimmed = line.trim_end_matches(['\r', '\n']);
-        if trimmed.is_empty() {
-            diag!("headers end encountered; content-length={:?}", content_length);
-            break; // end of headers
-        }
-        // Parse header as case-insensitive: "name: value"
-        if let Some((name, value)) = trimmed.split_once(':') {
-            if name.trim().eq_ignore_ascii_case("Content-Length") {
-                if let Ok(len) = value.trim().parse::<usize>() {
-                    content_length = Some(len);
-                    diag!("header Content-Length parsed={}", len);
-                }
+        let raw = line.trim_end_matches(['\r', '\n']).to_string();
+        if raw.is_empty() { continue; }
+        diag!("stdin line bytes={} first100={}", raw.len(), &raw.chars().take(100).collect::<String>());
+
+        let req: Result<Request, _> = serde_json::from_str(&raw);
+        let Some(request) = req.ok() else {
+            diag!("JSON parse error; sending -32700");
+            let resp = rpc_error(None, -32700, "Parse error", None);
+            write_json_line_response(&mut stdout, &resp)?;
+            continue;
+        };
+
+        // Log and ignore notifications
+        if request.id.is_none() {
+            if request.method == "initialized" || request.method == "notifications/initialized" {
+                diag!("initialized notification received");
+            } else {
+                diag!("notification ignored; method={}", request.method);
             }
+            continue; // no response to notifications
         }
-        // Ignore other headers
+
+        debug!("Received method={}", request.method);
+        if request.method == "initialize" {
+            diag!("initialize request received");
+        }
+        let resp = dispatch(request);
+        write_json_line_response(&mut stdout, &resp)?;
     }
-    match content_length {
-        Some(len) => Ok(Some(len)),
-        None => Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Missing Content-Length header",
-        )),
-    }
+    Ok(())
+}
+
+fn write_json_line_response(out: &mut dyn Write, resp: &Response) -> anyhow::Result<()> {
+    let payload = serde_json::to_string(resp)?;
+    writeln!(out, "{}", payload)?;
+    out.flush()?;
+    diag!(
+        "response written; json_len={} has_error={} has_result={}",
+        payload.len(),
+        resp.error.is_some(),
+        resp.result.is_some()
+    );
+    Ok(())
 }
 
 fn dispatch(req: Request) -> Response {
@@ -244,7 +199,7 @@ fn handle_initialize(id: Option<Id>) -> Response {
         id,
         serde_json::json!({
             "protocolVersion": PROTOCOL_VERSION,
-            "server": {
+            "serverInfo": {
                 "name": "github-mcp",
                 "version": env!("CARGO_PKG_VERSION"),
             },

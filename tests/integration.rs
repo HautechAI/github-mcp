@@ -1,19 +1,17 @@
 use assert_cmd::Command;
 use std::io::Write;
 
-fn frame(msg: &str) -> Vec<u8> {
-    let mut v = Vec::new();
-    write!(v, "Content-Length: {}\r\n\r\n{}", msg.len(), msg).unwrap();
-    v
-}
-
 fn run(req: &serde_json::Value) -> anyhow::Result<String> {
     let mut cmd = Command::cargo_bin("github-mcp")?;
     let input = serde_json::to_string(req)?;
     let assert = cmd
         .arg("--log-level")
         .arg("warn")
-        .write_stdin(frame(&input))
+        .write_stdin({
+            let mut b = Vec::new();
+            writeln!(b, "{}", input).unwrap();
+            b
+        })
         .assert();
     let output = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
     Ok(output)
