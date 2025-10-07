@@ -27,6 +27,116 @@ Configuration
 - HTTP timeout: `GITHUB_HTTP_TIMEOUT_SECS` (default 30).
 - User-Agent: `github-mcp/<version>` (set automatically).
 
+Use with MCP Clients
+
+Assumptions
+- You built or installed the binary and it is available on PATH as `github-mcp`.
+- Set an auth token via env: `GITHUB_TOKEN` (or `GH_TOKEN`).
+- The server uses stdio by default; no subcommand is required.
+
+Claude Desktop
+- Config file path
+  - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+  - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+  - Linux (community builds): `~/.config/Claude/claude_desktop_config.json`
+- Config snippet (paste into `claude_desktop_config.json`)
+```json
+{
+  "mcpServers": {
+    "github-mcp": {
+      "command": "github-mcp",
+      "args": [],
+      "env": {
+        "GITHUB_TOKEN": "${env:GITHUB_TOKEN}"
+      }
+    }
+  }
+}
+```
+- Reload: Fully quit Claude Desktop (Cmd+Q/Alt+F4) and relaunch.
+- Docs: https://modelcontextprotocol.io/docs/develop/connect-local-servers
+- Notes: On macOS, you may need to allow unsigned binaries in Privacy & Security.
+
+Cursor
+- Config file paths
+  - Project: `<project>/.cursor/mcp.json`
+  - Global: `~/.cursor/mcp.json` (Windows: `%USERPROFILE%\\.cursor\\mcp.json`)
+- Config snippet (project or global `mcp.json`)
+```json
+{
+  "mcpServers": {
+    "github-mcp": {
+      "type": "stdio",
+      "command": "github-mcp",
+      "args": [],
+      "env": {
+        "GITHUB_TOKEN": "${env:GITHUB_TOKEN}"
+      }
+    }
+  }
+}
+```
+- Reload: Close and reopen Cursor if tools don’t appear.
+- Docs: https://cursor.com/docs/context/mcp
+- Notes: Prefer PATH-resolved `github-mcp`; if using absolute paths with spaces on Windows, ensure proper quoting.
+
+Continue.dev (VS Code/JetBrains)
+- Global config
+  - macOS/Linux: `~/.continue/config.yaml`
+  - Windows: `%USERPROFILE%\\.continue\\config.yaml`
+- Workspace-scoped (recommended): add `.continue/mcpServers/github-mcp.yaml` in your project.
+- Workspace YAML (recommended)
+```yaml
+mcpServers:
+  - name: github-mcp
+    command: github-mcp
+    args: []
+    env:
+      GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+```
+- Or add the same block under `mcpServers:` in your global `~/.continue/config.yaml`.
+- Reload: Open Continue, switch to Agent mode to use MCP tools; click "Reload config" if needed.
+- Docs: https://docs.continue.dev/customize/deep-dives/mcp
+- Notes: Store your token in `~/.continue/.env` (or workspace `.continue/.env`) as `GITHUB_TOKEN` to avoid committing secrets.
+
+VS Code Copilot Chat (MCP)
+- Config locations
+  - Workspace: `.vscode/mcp.json`
+  - User: use Command Palette -> "MCP: Open User Configuration" (creates `mcp.json` under your VS Code user folder)
+    - macOS: `~/Library/Application Support/Code/User/mcp.json`
+    - Linux: `~/.config/Code/User/mcp.json`
+    - Windows: `%APPDATA%\Code\User\mcp.json`
+- Workspace `.vscode/mcp.json` example
+```json
+{
+  "servers": {
+    "github-mcp": {
+      "command": "github-mcp",
+      "args": [],
+      "env": {
+        "GITHUB_TOKEN": "${input:github_token}"
+      }
+    }
+  },
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "github_token",
+      "description": "GitHub token for github-mcp",
+      "password": true
+    }
+  ]
+}
+```
+- Optional: Enable discovery of Claude Desktop config via settings.json: `{ "chat.mcp.discovery.enabled": true }`.
+- Reload: Save `mcp.json`, then click the "Start" code lens in the editor or use Command Palette -> "MCP: Start Server". Open Copilot Chat and switch to Agent mode.
+- Docs: https://docs.github.com/copilot/customizing-copilot/using-model-context-protocol/extending-copilot-chat-with-mcp
+
+Server invocation and auth (for all clients)
+- Command: `github-mcp`
+- Args: none required (stdio is default). Optionally add `--log-level warn`.
+- Env: set `GITHUB_TOKEN` (fallback: `GH_TOKEN`). Example (macOS/Linux): `export GITHUB_TOKEN=ghp_...`  Example (Windows PowerShell): `setx GITHUB_TOKEN "ghp_..."` and restart your shell.
+
 Usage examples
 - Issues → list_issues
   - `echo '{"jsonrpc":"2.0","method":"tools/call","id":11,"params":{"name":"list_issues","arguments":{"owner":"octo","repo":"hello","limit":10,"include_author":true}}}' | cargo run -- --log-level warn`
