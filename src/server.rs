@@ -224,11 +224,8 @@ fn handle_initialize(id: Option<Id>) -> Response {
 
 fn handle_tools_list(id: Option<Id>) -> Response {
     let tools = tool_descriptors();
-    // Optional nicety: include nextCursor: null for future pagination compatibility
-    rpc_ok(
-        id,
-        serde_json::json!({ "tools": tools, "nextCursor": null }),
-    )
+    // Omit nextCursor when not paginating to align with MCP Inspector schema
+    rpc_ok(id, serde_json::json!({ "tools": tools }))
 }
 
 #[derive(Deserialize)]
