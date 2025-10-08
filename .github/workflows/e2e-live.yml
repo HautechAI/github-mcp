@@ -1,0 +1,100 @@
+name: E2E Live
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  e2e-live:
+    name: Build and E2E (live)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build (release)
+        run: cargo build --release --locked
+
+      - name: Setup Node and Inspector
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Doppler secrets
+        uses: dopplerhq/cli-action@v2
+
+      - name: Run E2E (read-only)
+        env:
+          E2E_OWNER: HautechAI
+          E2E_REPO: github-mcp-test-repo
+          E2E_ISSUE_NUM: '10'
+          E2E_PR_NUM: '9'
+        run: |
+          set -euxo pipefail
+          doppler run -p github-mcp -c dev -- bash ./scripts/e2e_live.sh
+
+      - name: Upload E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-live-artifacts
+          path: |
+            mcp-diag.log
+            mcp-e2e.log
+            out-*.json
+
+  e2e-live-mutations:
+    if: ${{ vars.E2E_ENABLE_MUTATIONS == 'true' }}
+    name: E2E (mutations)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Build (release)
+        run: cargo build --release --locked
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Doppler secrets
+        uses: dopplerhq/cli-action@v2
+      - name: Run E2E (mutations)
+        env:
+          E2E_OWNER: HautechAI
+          E2E_REPO: github-mcp-test-repo
+          E2E_ISSUE_NUM: '10'
+          E2E_PR_NUM: '9'
+          E2E_ENABLE_MUTATIONS: 'true'
+        run: |
+          set -euxo pipefail
+          doppler run -p github-mcp -c dev -- bash ./scripts/e2e_live.sh
+      - name: Upload E2E artifacts (mutations)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-live-artifacts-mutations
+          path: |
+            mcp-diag.log
+            mcp-e2e.log
+            out-*.json
+
