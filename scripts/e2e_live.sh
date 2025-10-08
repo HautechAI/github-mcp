@@ -137,6 +137,10 @@ tool_call() {
   assert_envelope_ok "$out"
 }
 
+# Ping
+tool_call ping "{\"message\":\"ok\"}"
+assert_has_field "$ROOT_DIR/out-ping.json" "o.structuredContent?.message"
+
 # Issues
 tool_call list_issues "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"limit\":10,\"include_author\":true}"
 assert_has_field "$ROOT_DIR/out-list_issues.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0"
@@ -157,6 +161,10 @@ assert_has_field "$ROOT_DIR/out-list_pull_requests.json" "Array.isArray(o.struct
 
 tool_call get_pull_request "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"include_author\":true}"
 assert_has_field "$ROOT_DIR/out-get_pull_request.json" "o.structuredContent?.pr?.number"
+
+# Negative path: non-existent PR
+tool_call get_pull_request "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":999999}"
+assert_is_error_code "$ROOT_DIR/out-get_pull_request.json" "not_found" || echo "[e2e] negative path: get_pull_request not_found assertion failed (tolerated)" | tee -a "$LOG"
 
 tool_call get_pr_status_summary "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM}"
 assert_has_field "$ROOT_DIR/out-get_pr_status_summary.json" "Array.isArray(o.structuredContent?.statuses) ? o.structuredContent.statuses.length : (o.structuredContent?.status || o.structuredContent?.combined_state ? 1 : 0)" || echo "[e2e] status summary may be empty; proceeding" | tee -a "$LOG"
@@ -229,7 +237,7 @@ NODE "$ROOT_DIR/out-list_workflow_jobs_light.json")
     echo "[e2e] mutations enabled; attempting rerun/cancel (best-effort)" | tee -a "$LOG"
     inspector tools/call --name rerun_workflow_run --arguments "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID}" | save_json "$ROOT_DIR/out-rerun_workflow_run.json" || true
     inspector tools/call --name rerun_workflow_run_failed --arguments "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID}" | save_json "$ROOT_DIR/out-rerun_workflow_run_failed.json" || true
-    inspector tools/call --name cancel_workflow_run --arguments "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID}" | save_json "$ROOT_DIR/out-cancel_workflow_run.json" | true
+    inspector tools/call --name cancel_workflow_run --arguments "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID}" | save_json "$ROOT_DIR/out-cancel_workflow_run.json" || true
   fi
 else
   echo "[e2e] no workflow runs found; skipping downstream actions checks" | tee -a "$LOG"
@@ -254,4 +262,3 @@ NODE "$ROOT_DIR/out-list_pr_review_threads_light.json")
 fi
 
 echo "[e2e] DONE" | tee -a "$LOG"
-
