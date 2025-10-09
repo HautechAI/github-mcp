@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file by Release Please.
 
+## [0.3.0](https://github.com/HautechAI/github-mcp/compare/v0.2.1...v0.3.0) (2025-10-09)
+
+
+### Features
+
+* **actions:** light tools for secrets/variables/environments ([#60](https://github.com/HautechAI/github-mcp/issues/60)) ([c7b7dd1](https://github.com/HautechAI/github-mcp/commit/c7b7dd16e829c63cb7f5a1a81d24d435b07d179a))
+
 ## [0.2.1](https://github.com/HautechAI/github-mcp/compare/v0.2.0...v0.2.1) (2025-10-07)
 
 
