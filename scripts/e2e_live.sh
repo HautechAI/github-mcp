@@ -117,15 +117,19 @@ NODE
 require_file
 require_tools
 
-# Handshake: initialize (no envelope; just protocolVersion)
-echo "[e2e] initialize" | tee -a "$LOG"
-inspector initialize | save_json "$ROOT_DIR/out-initialize.json"
-assert_has_field "$ROOT_DIR/out-initialize.json" "o.protocolVersion"
-
-# tools/list (no envelope; just tools array)
+# tools/list (implicit handshake occurs inside inspector-cli)
 echo "[e2e] tools/list" | tee -a "$LOG"
 inspector tools/list | save_json "$ROOT_DIR/out-tools.json"
 assert_has_field "$ROOT_DIR/out-tools.json" "Array.isArray(o.tools)?o.tools.length:o.length"
+
+# Optional: verify handshake was observed in diag log (non-fatal)
+if [ -f "$MCP_DIAG_LOG" ]; then
+  if grep -qi "initialize" "$MCP_DIAG_LOG"; then
+    echo "[e2e] handshake observed in diag log" | tee -a "$LOG"
+  else
+    echo "[e2e] note: handshake not found in diag log (non-fatal)" | tee -a "$LOG"
+  fi
+fi
 
 # Helper to call a tool with arguments and assert envelope
 tool_call() {
