@@ -38,6 +38,7 @@ jobs:
 
       - name: Run E2E (read-only)
         env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
           E2E_OWNER: HautechAI
           E2E_REPO: github-mcp-test-repo
           E2E_ISSUE_NUM: '10'
@@ -80,6 +81,7 @@ jobs:
         uses: dopplerhq/cli-action@v2
       - name: Run E2E (mutations)
         env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
           E2E_OWNER: HautechAI
           E2E_REPO: github-mcp-test-repo
           E2E_ISSUE_NUM: '10'
@@ -97,4 +99,3 @@ jobs:
             mcp-diag.log
             mcp-e2e.log
             out-*.json
-
