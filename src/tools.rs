@@ -201,6 +201,69 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
         input_schema: serde_json::json!({"type":"object","additionalProperties":false,"properties":{"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"}},"required":["owner","repo","number"]}),
     };
 
+    // Secrets, Variables, Environments (REST light)
+    let list_repo_secrets_light = ToolDescriptor {
+        name: "list_repo_secrets_light".into(),
+        description: "List repository Actions secrets (metadata only)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties":{
+                "owner":{"type":"string"},
+                "repo":{"type":"string"},
+                "cursor":{"type":"string"},
+                "page":{"type":"integer"},
+                "per_page":{"type":"integer"}
+            },
+            "required":["owner","repo"]
+        }),
+    };
+    let list_repo_variables_light = ToolDescriptor {
+        name: "list_repo_variables_light".into(),
+        description: "List repository Actions variables (may include values)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties":{
+                "owner":{"type":"string"},
+                "repo":{"type":"string"},
+                "cursor":{"type":"string"},
+                "page":{"type":"integer"},
+                "per_page":{"type":"integer"}
+            },
+            "required":["owner","repo"]
+        }),
+    };
+    let list_environments_light = ToolDescriptor {
+        name: "list_environments_light".into(),
+        description: "List repository environments (light)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties":{
+                "owner":{"type":"string"},
+                "repo":{"type":"string"},
+                "cursor":{"type":"string"},
+                "page":{"type":"integer"},
+                "per_page":{"type":"integer"}
+            },
+            "required":["owner","repo"]
+        }),
+    };
+    let list_environment_variables_light = ToolDescriptor {
+        name: "list_environment_variables_light".into(),
+        description: "List environment-scoped Actions variables (may include values)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties":{
+                "owner":{"type":"string"},
+                "repo":{"type":"string"},
+                "environment_name":{"type":"string"},
+                "cursor":{"type":"string"},
+                "page":{"type":"integer"},
+                "per_page":{"type":"integer"}
+            },
+            "required":["owner","repo","environment_name"]
+        }),
+    };
+
     vec![
         ping,
         list_issues,
@@ -218,6 +281,10 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
         list_pr_files,
         get_pr_diff,
         get_pr_patch,
+        list_repo_secrets_light,
+        list_repo_variables_light,
+        list_environments_light,
+        list_environment_variables_light,
     ]
 }
 
@@ -752,6 +819,67 @@ pub struct OkOutput {
     pub ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub queued_run_id: Option<i64>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+
+// Secrets / Variables / Environments inputs and outputs (REST light)
+#[derive(Debug, Deserialize)]
+pub struct RepoInput {
+    pub owner: String,
+    pub repo: String,
+    pub cursor: Option<String>,
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
+}
+#[derive(Debug, Deserialize)]
+pub struct EnvVarsInput {
+    pub owner: String,
+    pub repo: String,
+    pub environment_name: String,
+    pub cursor: Option<String>,
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RepoSecretItem {
+    pub name: String,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+#[derive(Debug, Serialize)]
+pub struct RepoVariableItem {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+#[derive(Debug, Serialize)]
+pub struct EnvironmentItem {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+}
+#[derive(Debug, Serialize)]
+pub struct ListRepoSecretsOutput {
+    pub items: Option<Vec<RepoSecretItem>>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+#[derive(Debug, Serialize)]
+pub struct ListRepoVariablesOutput {
+    pub items: Option<Vec<RepoVariableItem>>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+#[derive(Debug, Serialize)]
+pub struct ListEnvironmentsOutput {
+    pub items: Option<Vec<EnvironmentItem>>,
     pub meta: Meta,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<ErrorShape>,

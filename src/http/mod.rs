@@ -89,6 +89,29 @@ pub fn extract_rate_from_rest(headers: &HeaderMap) -> RateMeta {
     }
 }
 
+// Percent-encode a single URL path segment per RFC3986 (encode all but unreserved)
+// Unreserved: ALPHA / DIGIT / "-" / "." / "_" / "~"
+pub fn encode_path_segment(s: &str) -> String {
+    fn is_unreserved(b: u8) -> bool {
+        matches!(b,
+            b'A'..=b'Z' |
+            b'a'..=b'z' |
+            b'0'..=b'9' |
+            b'-' | b'.' | b'_' | b'~'
+        )
+    }
+    let mut out = String::with_capacity(s.len());
+    for &b in s.as_bytes() {
+        if is_unreserved(b) {
+            out.push(b as char);
+        } else {
+            out.push('%');
+            out.push_str(&format!("{:02X}", b));
+        }
+    }
+    out
+}
+
 fn compute_backoff(attempt: u32, retry_after: Option<Duration>) -> Duration {
     if let Some(d) = retry_after {
         return d;

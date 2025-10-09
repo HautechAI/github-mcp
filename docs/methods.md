@@ -9,6 +9,7 @@ Tools Index
 - Issues: [list_issues](#tool-list_issues), [get_issue](#tool-get_issue), [list_issue_comments_plain](#tool-list_issue_comments_plain)
 - Pull Requests: [list_pull_requests](#tool-list_pull_requests), [get_pull_request](#tool-get_pull_request), [get_pr_status_summary](#tool-get_pr_status_summary), [list_pr_comments_plain](#tool-list_pr_comments_plain), [list_pr_review_comments_plain](#tool-list_pr_review_comments_plain), [list_pr_review_threads_light](#tool-list_pr_review_threads_light), [resolve_pr_review_thread](#tool-resolve_pr_review_thread), [unresolve_pr_review_thread](#tool-unresolve_pr_review_thread), [list_pr_reviews_light](#tool-list_pr_reviews_light), [list_pr_commits_light](#tool-list_pr_commits_light), [list_pr_files_light](#tool-list_pr_files_light), [get_pr_diff](#tool-get_pr_diff), [get_pr_patch](#tool-get_pr_patch)
 - Workflows: [list_workflows_light](#tool-list_workflows_light), [list_workflow_runs_light](#tool-list_workflow_runs_light), [get_workflow_run_light](#tool-get_workflow_run_light), [list_workflow_jobs_light](#tool-list_workflow_jobs_light), [get_workflow_job_logs](#tool-get_workflow_job_logs), [rerun_workflow_run](#tool-rerun_workflow_run), [rerun_workflow_run_failed](#tool-rerun_workflow_run_failed), [cancel_workflow_run](#tool-cancel_workflow_run)
+- Secrets/Variables/Environments: [list_repo_secrets_light](#tool-list_repo_secrets_light), [list_repo_variables_light](#tool-list_repo_variables_light), [list_environments_light](#tool-list_environments_light), [list_environment_variables_light](#tool-list_environment_variables_light)
 
 Shared conventions
 - Pagination (inputs): cursor (string, optional), limit (int, default 30, max 100). For REST tools, server maps cursor to page/per_page.
@@ -811,6 +812,130 @@ API
 - Path: /repos/{owner}/{repo}/actions/workflows?per_page=&page
 - Accept: application/vnd.github+json
 - Notes: Include header `X-GitHub-Api-Version: 2022-11-28`.
+
+SECRETS / VARIABLES / ENVIRONMENTS (GitHub Actions)
+
+## Tool: list_repo_secrets_light
+Purpose: List repository Actions secrets (metadata only). Never exposes secret values.
+
+Inputs
+
+| name | type | required | default | allowed | notes |
+| --- | --- | --- | --- | --- | --- |
+| owner | string | yes |  |  |  |
+| repo | string | yes |  |  |  |
+| cursor | string | no |  |  | Opaque; server maps to REST page/per_page |
+| page | int | no |  |  | REST pagination |
+| per_page | int | no |  |  | REST pagination |
+
+Outputs
+
+| field | type | presence | notes |
+| --- | --- | --- | --- |
+| items[].name | string | always |  |
+| items[].created_at | string or null | always |  |
+| items[].updated_at | string or null | always |  |
+| meta | object | always | next_cursor, has_more, rate.remaining, rate.used, rate.reset_at? |
+| error | object | optional | see Error shape |
+
+API
+- REST only
+- Method: GET
+- Path: /repos/{owner}/{repo}/actions/secrets?per_page=&page
+- Accept: application/vnd.github+json
+- Notes: Include header `X-GitHub-Api-Version: 2022-11-28`. Do not include any secret values; GitHub does not return them for list.
+
+## Tool: list_repo_variables_light
+Purpose: List repository Actions variables (may include value as returned by API).
+
+Inputs
+
+| name | type | required | default | allowed | notes |
+| --- | --- | --- | --- | --- | --- |
+| owner | string | yes |  |  |  |
+| repo | string | yes |  |  |  |
+| cursor | string | no |  |  | Opaque; server maps to REST page/per_page |
+| page | int | no |  |  | REST pagination |
+| per_page | int | no |  |  | REST pagination |
+
+Outputs
+
+| field | type | presence | notes |
+| --- | --- | --- | --- |
+| items[].name | string | always |  |
+| items[].value | string or null | optional | value present when API returns it |
+| items[].created_at | string or null | always |  |
+| items[].updated_at | string or null | always |  |
+| meta | object | always | next_cursor, has_more, rate.remaining, rate.used, rate.reset_at? |
+| error | object | optional | see Error shape |
+
+API
+- REST only
+- Method: GET
+- Path: /repos/{owner}/{repo}/actions/variables?per_page=&page
+- Accept: application/vnd.github+json
+- Notes: Include header `X-GitHub-Api-Version: 2022-11-28`.
+
+## Tool: list_environments_light
+Purpose: List repository environments.
+
+Inputs
+
+| name | type | required | default | allowed | notes |
+| --- | --- | --- | --- | --- | --- |
+| owner | string | yes |  |  |  |
+| repo | string | yes |  |  |  |
+| cursor | string | no |  |  | Opaque; server maps to REST page/per_page |
+| page | int | no |  |  | REST pagination |
+| per_page | int | no |  |  | REST pagination |
+
+Outputs
+
+| field | type | presence | notes |
+| --- | --- | --- | --- |
+| items[].name | string | always |  |
+| items[].url | string or null | optional |  |
+| meta | object | always | next_cursor, has_more, rate.remaining, rate.used, rate.reset_at? |
+| error | object | optional | see Error shape |
+
+API
+- REST only
+- Method: GET
+- Path: /repos/{owner}/{repo}/environments?per_page=&page
+- Accept: application/vnd.github+json
+- Notes: Include header `X-GitHub-Api-Version: 2022-11-28`.
+
+## Tool: list_environment_variables_light
+Purpose: List environment-scoped Actions variables (may include values). The environment_name is URL-encoded in the path.
+
+Inputs
+
+| name | type | required | default | allowed | notes |
+| --- | --- | --- | --- | --- | --- |
+| owner | string | yes |  |  |  |
+| repo | string | yes |  |  |  |
+| environment_name | string | yes |  |  | URL-encoded by server in path |
+| cursor | string | no |  |  | Opaque; server maps to REST page/per_page |
+| page | int | no |  |  | REST pagination |
+| per_page | int | no |  |  | REST pagination |
+
+Outputs
+
+| field | type | presence | notes |
+| --- | --- | --- | --- |
+| items[].name | string | always |  |
+| items[].value | string or null | optional | value present when API returns it |
+| items[].created_at | string or null | always |  |
+| items[].updated_at | string or null | always |  |
+| meta | object | always | next_cursor, has_more, rate.remaining, rate.used, rate.reset_at? |
+| error | object | optional | see Error shape |
+
+API
+- REST only
+- Method: GET
+- Path: /repos/{owner}/{repo}/environments/{environment_name}/variables?per_page=&page
+- Accept: application/vnd.github+json
+- Notes: Include header `X-GitHub-Api-Version: 2022-11-28`. Server URL-encodes environment_name segment.
 
 ## Tool: list_workflow_runs_light
 Purpose: List workflow runs for a workflow id with minimal fields.
