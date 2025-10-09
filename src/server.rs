@@ -422,6 +422,7 @@ fn handle_list_workflows(id: Option<Id>, params: Value) -> Response {
                 )
             }
         };
+        // Workflows REST light: page/per_page only; no cursor field in input schema
         let (page, per_page, _cur) = parse_page_cursor(None, input.page, input.per_page);
         let path = format!(
             "/repos/{}/{}/actions/workflows?per_page={}&page={}",
@@ -532,6 +533,7 @@ fn handle_list_workflow_runs(id: Option<Id>, params: Value) -> Response {
                 )
             }
         };
+        // Workflow runs REST light: page/per_page only; no cursor field in input schema
         let (page, per_page, _cur) = parse_page_cursor(None, input.page, input.per_page);
         let path = format!(
             "/repos/{}/{}/actions/runs?per_page={}&page={}",
@@ -756,6 +758,7 @@ fn handle_list_workflow_jobs(id: Option<Id>, params: Value) -> Response {
                 )
             }
         };
+        // Workflow jobs REST light: page/per_page only; no cursor field in input schema
         let (page, per_page, _cur) = parse_page_cursor(None, input.page, input.per_page);
         let filter = input.filter.unwrap_or_else(|| "all".into());
         let path = format!(
@@ -1426,7 +1429,8 @@ fn handle_list_repo_variables(id: Option<Id>, params: Value) -> Response {
                 )
             }
         };
-        let (page, per_page, _cur) = parse_page_cursor(None, input.page, input.per_page);
+        // Environment variables: support cursor-based pagination
+        let (page, per_page, _cur) = parse_page_cursor(input.cursor, input.page, input.per_page);
         let path = format!(
             "/repos/{}/{}/actions/variables?per_page={}&page={}",
             input.owner, input.repo, per_page, page
@@ -1533,7 +1537,8 @@ fn handle_list_environments(id: Option<Id>, params: Value) -> Response {
                 )
             }
         };
-        let (page, per_page, _cur) = parse_page_cursor(None, input.page, input.per_page);
+        // Environments: support cursor-based pagination
+        let (page, per_page, _cur) = parse_page_cursor(input.cursor, input.page, input.per_page);
         let path = format!(
             "/repos/{}/{}/environments?per_page={}&page={}",
             input.owner, input.repo, per_page, page
@@ -1639,7 +1644,8 @@ fn handle_list_environment_variables(id: Option<Id>, params: Value) -> Response 
                 )
             }
         };
-        let (page, per_page, _cur) = parse_page_cursor(None, input.page, input.per_page);
+        // Environment variables: support cursor-based pagination
+        let (page, per_page, _cur) = parse_page_cursor(input.cursor, input.page, input.per_page);
         // Ensure environment_name is URL-encoded in the path
         let env_enc = http::encode_path_segment(&input.environment_name);
         let path = format!(
