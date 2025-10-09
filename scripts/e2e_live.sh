@@ -24,28 +24,28 @@ ENABLE_MUTATIONS=${E2E_ENABLE_MUTATIONS:-"false"}
 LOG=${E2E_LOG_PATH:-"$ROOT_DIR/mcp-e2e.log"}
 export MCP_DIAG_LOG=${MCP_DIAG_LOG:-"$ROOT_DIR/mcp-diag.log"}
 
-echo "[e2e] github-mcp E2E starting" | tee "$LOG"
-echo "[e2e] binary: $BIN_PATH" | tee -a "$LOG"
-echo "[e2e] repo: $OWNER/$REPO issue #$ISSUE_NUM pr #$PR_NUM" | tee -a "$LOG"
-echo "[e2e] mutations enabled: $ENABLE_MUTATIONS" | tee -a "$LOG"
+echo "[e2e] github-mcp E2E starting" | tee "$LOG" >&2
+echo "[e2e] binary: $BIN_PATH" | tee -a "$LOG" >&2
+echo "[e2e] repo: $OWNER/$REPO issue #$ISSUE_NUM pr #$PR_NUM" | tee -a "$LOG" >&2
+echo "[e2e] mutations enabled: $ENABLE_MUTATIONS" | tee -a "$LOG" >&2
 
 require_file() {
   if [ ! -x "$BIN_PATH" ]; then
-    echo "[e2e][fatal] binary not found or not executable: $BIN_PATH" | tee -a "$LOG"
+    echo "[e2e][fatal] binary not found or not executable: $BIN_PATH" | tee -a "$LOG" >&2
     exit 1
   fi
 }
 
 require_tools() {
-  command -v node >/dev/null 2>&1 || { echo "[e2e][fatal] node is required" | tee -a "$LOG"; exit 1; }
-  command -v npx >/dev/null 2>&1 || { echo "[e2e][fatal] npx is required" | tee -a "$LOG"; exit 1; }
+  command -v node >/dev/null 2>&1 || { echo "[e2e][fatal] node is required" | tee -a "$LOG" >&2; exit 1; }
+  command -v npx >/dev/null 2>&1 || { echo "[e2e][fatal] npx is required" | tee -a "$LOG" >&2; exit 1; }
 }
 
 inspector() {
   local method="$1"; shift
   # Try with timeout if present in CLI; fall back if older versions
   if ! npx -y @modelcontextprotocol/inspector-cli --version >/dev/null 2>&1; then
-    echo "[e2e] installing inspector-cli on the fly" | tee -a "$LOG"
+    echo "[e2e] installing inspector-cli on the fly" | tee -a "$LOG" >&2
   fi
   npx -y @modelcontextprotocol/inspector-cli --cli "$BIN_PATH" --method "$method" "$@"
 }
@@ -118,16 +118,16 @@ require_file
 require_tools
 
 # tools/list (implicit handshake occurs inside inspector-cli)
-echo "[e2e] tools/list" | tee -a "$LOG"
+echo "[e2e] tools/list" | tee -a "$LOG" >&2
 inspector tools/list | save_json "$ROOT_DIR/out-tools.json"
 assert_has_field "$ROOT_DIR/out-tools.json" "Array.isArray(o.tools)?o.tools.length:o.length"
 
 # Optional: verify handshake was observed in diag log (non-fatal)
 if [ -f "$MCP_DIAG_LOG" ]; then
   if grep -qi "initialize" "$MCP_DIAG_LOG"; then
-    echo "[e2e] handshake observed in diag log" | tee -a "$LOG"
+    echo "[e2e] handshake observed in diag log" | tee -a "$LOG" >&2
   else
-    echo "[e2e] note: handshake not found in diag log (non-fatal)" | tee -a "$LOG"
+    echo "[e2e] note: handshake not found in diag log (non-fatal)" | tee -a "$LOG" >&2
   fi
 fi
 
@@ -136,7 +136,7 @@ tool_call() {
   local name="$1"; shift
   local args_json="$1"; shift
   local out="$ROOT_DIR/out-${name}.json"
-  echo "[e2e] tools/call ${name} ${args_json}" | tee -a "$LOG"
+  echo "[e2e] tools/call ${name} ${args_json}" | tee -a "$LOG" >&2
   inspector tools/call --name "$name" --arguments "$args_json" | save_json "$out"
   assert_envelope_ok "$out"
 }
@@ -153,11 +153,11 @@ tool_call get_issue "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$ISSUE_
 assert_has_field "$ROOT_DIR/out-get_issue.json" "o.structuredContent?.issue?.number"
 
 tool_call list_issue_comments_plain "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$ISSUE_NUM,\"limit\":10}"
-assert_has_field "$ROOT_DIR/out-list_issue_comments_plain.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0" || echo "[e2e] note: issue may have zero comments; proceeding" | tee -a "$LOG"
+assert_has_field "$ROOT_DIR/out-list_issue_comments_plain.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0" || echo "[e2e] note: issue may have zero comments; proceeding" | tee -a "$LOG" >&2
 
 # Negative path: non-existent issue
 tool_call get_issue "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":999999}"
-assert_is_error_code "$ROOT_DIR/out-get_issue.json" "not_found" || echo "[e2e] negative path: get_issue not_found assertion failed (tolerated)" | tee -a "$LOG"
+assert_is_error_code "$ROOT_DIR/out-get_issue.json" "not_found" || echo "[e2e] negative path: get_issue not_found assertion failed (tolerated)" | tee -a "$LOG" >&2
 
 # PRs
 tool_call list_pull_requests "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"limit\":10,\"include_author\":true}"
@@ -171,10 +171,10 @@ tool_call get_pull_request "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":
 assert_is_error_code "$ROOT_DIR/out-get_pull_request.json" "not_found" || echo "[e2e] negative path: get_pull_request not_found assertion failed (tolerated)" | tee -a "$LOG"
 
 tool_call get_pr_status_summary "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM}"
-assert_has_field "$ROOT_DIR/out-get_pr_status_summary.json" "Array.isArray(o.structuredContent?.statuses) ? o.structuredContent.statuses.length : (o.structuredContent?.status || o.structuredContent?.combined_state ? 1 : 0)" || echo "[e2e] status summary may be empty; proceeding" | tee -a "$LOG"
+assert_has_field "$ROOT_DIR/out-get_pr_status_summary.json" "Array.isArray(o.structuredContent?.statuses) ? o.structuredContent.statuses.length : (o.structuredContent?.status || o.structuredContent?.combined_state ? 1 : 0)" || echo "[e2e] status summary may be empty; proceeding" | tee -a "$LOG" >&2
 
 tool_call list_pr_comments_plain "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":10}"
-assert_has_field "$ROOT_DIR/out-list_pr_comments_plain.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0" || echo "[e2e] note: PR may have zero comments; proceeding" | tee -a "$LOG"
+assert_has_field "$ROOT_DIR/out-list_pr_comments_plain.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0" || echo "[e2e] note: PR may have zero comments; proceeding" | tee -a "$LOG" >&2
 
 tool_call list_pr_review_comments_plain "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":10}"
 assert_has_field "$ROOT_DIR/out-list_pr_review_comments_plain.json" "Array.isArray(o.structuredContent?.items)"
@@ -192,17 +192,17 @@ tool_call list_pr_files_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number
 assert_has_field "$ROOT_DIR/out-list_pr_files_light.json" "Array.isArray(o.structuredContent?.items)"
 
 tool_call get_pr_diff "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM}"
-assert_has_field "$ROOT_DIR/out-get_pr_diff.json" "(o.structuredContent?.diff||'').length" || echo "[e2e] get_pr_diff may be empty; proceeding" | tee -a "$LOG"
+assert_has_field "$ROOT_DIR/out-get_pr_diff.json" "(o.structuredContent?.diff||'').length" || echo "[e2e] get_pr_diff may be empty; proceeding" | tee -a "$LOG" >&2
 
 tool_call get_pr_patch "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM}"
-assert_has_field "$ROOT_DIR/out-get_pr_patch.json" "(o.structuredContent?.patch||'').length" || echo "[e2e] get_pr_patch may be empty; proceeding" | tee -a "$LOG"
+assert_has_field "$ROOT_DIR/out-get_pr_patch.json" "(o.structuredContent?.patch||'').length" || echo "[e2e] get_pr_patch may be empty; proceeding" | tee -a "$LOG" >&2
 
 # Actions (REST)
 tool_call list_workflows_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"per_page\":50,\"page\":1}"
-assert_has_field "$ROOT_DIR/out-list_workflows_light.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0" || echo "[e2e] no workflows listed; proceeding" | tee -a "$LOG"
+assert_has_field "$ROOT_DIR/out-list_workflows_light.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0" || echo "[e2e] no workflows listed; proceeding" | tee -a "$LOG" >&2
 
 tool_call list_workflow_runs_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"per_page\":25,\"page\":1}"
-assert_has_field "$ROOT_DIR/out-list_workflow_runs_light.json" "Array.isArray(o.structuredContent?.items)" || echo "[e2e] no workflow runs; proceeding" | tee -a "$LOG"
+assert_has_field "$ROOT_DIR/out-list_workflow_runs_light.json" "Array.isArray(o.structuredContent?.items)" || echo "[e2e] no workflow runs; proceeding" | tee -a "$LOG" >&2
 
 # Try to pick the newest run id for further checks
 LATEST_RUN_ID=$(node - "$ROOT_DIR/out-list_workflow_runs_light.json" <<'NODE'
@@ -234,19 +234,19 @@ NODE
 
   if [ -n "$JOB_ID" ]; then
     tool_call get_workflow_job_logs "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"job_id\":$JOB_ID,\"tail_lines\":200,\"include_timestamps\":true}"
-    assert_has_field "$ROOT_DIR/out-get_workflow_job_logs.json" "(o.structuredContent?.logs||'').length" || echo "[e2e] logs not available; proceeding" | tee -a "$LOG"
+    assert_has_field "$ROOT_DIR/out-get_workflow_job_logs.json" "(o.structuredContent?.logs||'').length" || echo "[e2e] logs not available; proceeding" | tee -a "$LOG" >&2
   else
-    echo "[e2e] skip job logs (no jobs)" | tee -a "$LOG"
+    echo "[e2e] skip job logs (no jobs)" | tee -a "$LOG" >&2
   fi
 
   if [ "$ENABLE_MUTATIONS" = "true" ]; then
-    echo "[e2e] mutations enabled; attempting rerun/cancel (best-effort)" | tee -a "$LOG"
+    echo "[e2e] mutations enabled; attempting rerun/cancel (best-effort)" | tee -a "$LOG" >&2
     inspector tools/call --name rerun_workflow_run --arguments "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID}" | save_json "$ROOT_DIR/out-rerun_workflow_run.json" || true
     inspector tools/call --name rerun_workflow_run_failed --arguments "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID}" | save_json "$ROOT_DIR/out-rerun_workflow_run_failed.json" || true
     inspector tools/call --name cancel_workflow_run --arguments "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID}" | save_json "$ROOT_DIR/out-cancel_workflow_run.json" || true
   fi
 else
-  echo "[e2e] no workflow runs found; skipping downstream actions checks" | tee -a "$LOG"
+  echo "[e2e] no workflow runs found; skipping downstream actions checks" | tee -a "$LOG" >&2
 fi
 
 # Review thread resolve/unresolve are gated and require a thread id; we only attempt if non-empty.
@@ -264,8 +264,8 @@ NODE
     inspector tools/call --name resolve_pr_review_thread --arguments "{\"thread_id\":\"$THREAD_ID\"}" | save_json "$ROOT_DIR/out-resolve_pr_review_thread.json" || true
     inspector tools/call --name unresolve_pr_review_thread --arguments "{\"thread_id\":\"$THREAD_ID\"}" | save_json "$ROOT_DIR/out-unresolve_pr_review_thread.json" || true
   else
-    echo "[e2e] skip resolve/unresolve (no thread)" | tee -a "$LOG"
+    echo "[e2e] skip resolve/unresolve (no thread)" | tee -a "$LOG" >&2
   fi
 fi
 
-echo "[e2e] DONE" | tee -a "$LOG"
+echo "[e2e] DONE" | tee -a "$LOG" >&2
