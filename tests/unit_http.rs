@@ -39,7 +39,10 @@ fn rest_rate_headers() {
 #[test]
 fn url_path_segment_encoding() {
     // Spaces, slash, percent and unicode should be percent-encoded
-    assert_eq!(encode_path_segment("Prod Env/Blue%"), "Prod%20Env%2FBlue%25");
+    assert_eq!(
+        encode_path_segment("Prod Env/Blue%"),
+        "Prod%20Env%2FBlue%25"
+    );
     // Unreserved characters remain as-is
     assert_eq!(encode_path_segment("abc-._~123"), "abc-._~123");
 }

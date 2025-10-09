@@ -1294,52 +1294,210 @@ fn handle_list_repo_secrets(id: Option<Id>, params: Value) -> Response {
         Ok(v) => v,
         Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
     };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
         let (page, per_page, _cur) = parse_page_cursor(None, input.page, input.per_page);
-        let path = format!("/repos/{}/{}/actions/secrets?per_page={}&page={}", input.owner, input.repo, per_page, page);
+        let path = format!(
+            "/repos/{}/{}/actions/secrets?per_page={}&page={}",
+            input.owner, input.repo, per_page, page
+        );
         #[derive(Deserialize)]
-        struct Resp { secrets: Vec<Secret> }
+        struct Resp {
+            secrets: Vec<Secret>,
+        }
         #[derive(Deserialize)]
-        struct Secret { name: String, created_at: Option<String>, updated_at: Option<String> }
+        struct Secret {
+            name: String,
+            created_at: Option<String>,
+            updated_at: Option<String>,
+        }
         let resp = http::rest_get_json::<Resp>(&client, &cfg, &path).await;
-        if let Some(err) = resp.error { return (None, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
         let rate = resp.meta.rate;
-        let items = resp.value.map(|v| v.secrets.into_iter().map(|s| RepoSecretItem{ name: s.name, created_at: s.created_at, updated_at: s.updated_at }).collect());
-        let has_more = resp.headers.as_ref().map(http::has_next_page_from_link).unwrap_or(false);
-        let next_cursor = if has_more { Some(http::encode_rest_cursor(http::RestCursor{ page: page+1, per_page })) } else { None };
-        (items, Meta{ next_cursor, has_more, rate }, None)
+        let items = resp.value.map(|v| {
+            v.secrets
+                .into_iter()
+                .map(|s| RepoSecretItem {
+                    name: s.name,
+                    created_at: s.created_at,
+                    updated_at: s.updated_at,
+                })
+                .collect()
+        });
+        let has_more = resp
+            .headers
+            .as_ref()
+            .map(http::has_next_page_from_link)
+            .unwrap_or(false);
+        let next_cursor = if has_more {
+            Some(http::encode_rest_cursor(http::RestCursor {
+                page: page + 1,
+                per_page,
+            }))
+        } else {
+            None
+        };
+        (
+            items,
+            Meta {
+                next_cursor,
+                has_more,
+                rate,
+            },
+            None,
+        )
     });
-    let out = ListRepoSecretsOutput{ items, meta, error: err };
+    let out = ListRepoSecretsOutput {
+        items,
+        meta,
+        error: err,
+    };
     let structured = serde_json::to_value(&out).unwrap();
-    let text = out.items.as_ref().map(|v| format!("{} secrets (metadata)", v.len()));
+    let text = out
+        .items
+        .as_ref()
+        .map(|v| format!("{} secrets (metadata)", v.len()));
     let wrapped = mcp_wrap(structured, text, out.error.is_some());
     rpc_ok(id, wrapped)
 }
 
 fn handle_list_repo_variables(id: Option<Id>, params: Value) -> Response {
-    let input: RepoInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: RepoInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
         let (page, per_page, _cur) = parse_page_cursor(None, input.page, input.per_page);
-        let path = format!("/repos/{}/{}/actions/variables?per_page={}&page={}", input.owner, input.repo, per_page, page);
+        let path = format!(
+            "/repos/{}/{}/actions/variables?per_page={}&page={}",
+            input.owner, input.repo, per_page, page
+        );
         #[derive(Deserialize)]
-        struct Resp { variables: Vec<Var> }
+        struct Resp {
+            variables: Vec<Var>,
+        }
         #[derive(Deserialize)]
-        struct Var { name: String, value: Option<String>, created_at: Option<String>, updated_at: Option<String> }
+        struct Var {
+            name: String,
+            value: Option<String>,
+            created_at: Option<String>,
+            updated_at: Option<String>,
+        }
         let resp = http::rest_get_json::<Resp>(&client, &cfg, &path).await;
-        if let Some(err) = resp.error { return (None, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
         let rate = resp.meta.rate;
-        let items = resp.value.map(|v| v.variables.into_iter().map(|x| RepoVariableItem{ name: x.name, value: x.value, created_at: x.created_at, updated_at: x.updated_at }).collect());
-        let has_more = resp.headers.as_ref().map(http::has_next_page_from_link).unwrap_or(false);
-        let next_cursor = if has_more { Some(http::encode_rest_cursor(http::RestCursor{ page: page+1, per_page })) } else { None };
-        (items, Meta{ next_cursor, has_more, rate }, None)
+        let items = resp.value.map(|v| {
+            v.variables
+                .into_iter()
+                .map(|x| RepoVariableItem {
+                    name: x.name,
+                    value: x.value,
+                    created_at: x.created_at,
+                    updated_at: x.updated_at,
+                })
+                .collect()
+        });
+        let has_more = resp
+            .headers
+            .as_ref()
+            .map(http::has_next_page_from_link)
+            .unwrap_or(false);
+        let next_cursor = if has_more {
+            Some(http::encode_rest_cursor(http::RestCursor {
+                page: page + 1,
+                per_page,
+            }))
+        } else {
+            None
+        };
+        (
+            items,
+            Meta {
+                next_cursor,
+                has_more,
+                rate,
+            },
+            None,
+        )
     });
-    let out = ListRepoVariablesOutput{ items, meta, error: err };
+    let out = ListRepoVariablesOutput {
+        items,
+        meta,
+        error: err,
+    };
     let structured = serde_json::to_value(&out).unwrap();
     let text = out.items.as_ref().map(|v| format!("{} variables", v.len()));
     let wrapped = mcp_wrap(structured, text, out.error.is_some());
@@ -1347,55 +1505,215 @@ fn handle_list_repo_variables(id: Option<Id>, params: Value) -> Response {
 }
 
 fn handle_list_environments(id: Option<Id>, params: Value) -> Response {
-    let input: RepoInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: RepoInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
         let (page, per_page, _cur) = parse_page_cursor(None, input.page, input.per_page);
-        let path = format!("/repos/{}/{}/environments?per_page={}&page={}", input.owner, input.repo, per_page, page);
+        let path = format!(
+            "/repos/{}/{}/environments?per_page={}&page={}",
+            input.owner, input.repo, per_page, page
+        );
         #[derive(Deserialize)]
-        struct Resp { total_count: Option<i64>, environments: Vec<Env> }
+        struct Resp {
+            total_count: Option<i64>,
+            environments: Vec<Env>,
+        }
         #[derive(Deserialize)]
-        struct Env { name: String, url: Option<String> }
+        struct Env {
+            name: String,
+            url: Option<String>,
+        }
         let resp = http::rest_get_json::<Resp>(&client, &cfg, &path).await;
-        if let Some(err) = resp.error { return (None, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
         let rate = resp.meta.rate;
-        let items = resp.value.map(|v| v.environments.into_iter().map(|e| EnvironmentItem{ name: e.name, url: e.url }).collect());
-        let has_more = resp.headers.as_ref().map(http::has_next_page_from_link).unwrap_or(false);
-        let next_cursor = if has_more { Some(http::encode_rest_cursor(http::RestCursor{ page: page+1, per_page })) } else { None };
-        (items, Meta{ next_cursor, has_more, rate }, None)
+        let items = resp.value.map(|v| {
+            v.environments
+                .into_iter()
+                .map(|e| EnvironmentItem {
+                    name: e.name,
+                    url: e.url,
+                })
+                .collect()
+        });
+        let has_more = resp
+            .headers
+            .as_ref()
+            .map(http::has_next_page_from_link)
+            .unwrap_or(false);
+        let next_cursor = if has_more {
+            Some(http::encode_rest_cursor(http::RestCursor {
+                page: page + 1,
+                per_page,
+            }))
+        } else {
+            None
+        };
+        (
+            items,
+            Meta {
+                next_cursor,
+                has_more,
+                rate,
+            },
+            None,
+        )
     });
-    let out = ListEnvironmentsOutput{ items, meta, error: err };
+    let out = ListEnvironmentsOutput {
+        items,
+        meta,
+        error: err,
+    };
     let structured = serde_json::to_value(&out).unwrap();
-    let text = out.items.as_ref().map(|v| format!("{} environments", v.len()));
+    let text = out
+        .items
+        .as_ref()
+        .map(|v| format!("{} environments", v.len()));
     let wrapped = mcp_wrap(structured, text, out.error.is_some());
     rpc_ok(id, wrapped)
 }
 
 fn handle_list_environment_variables(id: Option<Id>, params: Value) -> Response {
-    let input: EnvVarsInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
+    let input: EnvVarsInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
         let (page, per_page, _cur) = parse_page_cursor(None, input.page, input.per_page);
         // Ensure environment_name is URL-encoded in the path
         let env_enc = http::encode_path_segment(&input.environment_name);
-        let path = format!("/repos/{}/{}/environments/{}/variables?per_page={}&page={}", input.owner, input.repo, env_enc, per_page, page);
+        let path = format!(
+            "/repos/{}/{}/environments/{}/variables?per_page={}&page={}",
+            input.owner, input.repo, env_enc, per_page, page
+        );
         #[derive(Deserialize)]
-        struct Resp { variables: Vec<Var> }
+        struct Resp {
+            variables: Vec<Var>,
+        }
         #[derive(Deserialize)]
-        struct Var { name: String, value: Option<String>, created_at: Option<String>, updated_at: Option<String> }
+        struct Var {
+            name: String,
+            value: Option<String>,
+            created_at: Option<String>,
+            updated_at: Option<String>,
+        }
         let resp = http::rest_get_json::<Resp>(&client, &cfg, &path).await;
-        if let Some(err) = resp.error { return (None, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
         let rate = resp.meta.rate;
-        let items = resp.value.map(|v| v.variables.into_iter().map(|x| RepoVariableItem{ name: x.name, value: x.value, created_at: x.created_at, updated_at: x.updated_at }).collect());
-        let has_more = resp.headers.as_ref().map(http::has_next_page_from_link).unwrap_or(false);
-        let next_cursor = if has_more { Some(http::encode_rest_cursor(http::RestCursor{ page: page+1, per_page })) } else { None };
-        (items, Meta{ next_cursor, has_more, rate }, None)
+        let items = resp.value.map(|v| {
+            v.variables
+                .into_iter()
+                .map(|x| RepoVariableItem {
+                    name: x.name,
+                    value: x.value,
+                    created_at: x.created_at,
+                    updated_at: x.updated_at,
+                })
+                .collect()
+        });
+        let has_more = resp
+            .headers
+            .as_ref()
+            .map(http::has_next_page_from_link)
+            .unwrap_or(false);
+        let next_cursor = if has_more {
+            Some(http::encode_rest_cursor(http::RestCursor {
+                page: page + 1,
+                per_page,
+            }))
+        } else {
+            None
+        };
+        (
+            items,
+            Meta {
+                next_cursor,
+                has_more,
+                rate,
+            },
+            None,
+        )
     });
-    let out = ListRepoVariablesOutput{ items, meta, error: err };
+    let out = ListRepoVariablesOutput {
+        items,
+        meta,
+        error: err,
+    };
     let structured = serde_json::to_value(&out).unwrap();
     let text = out.items.as_ref().map(|v| format!("{} env vars", v.len()));
     let wrapped = mcp_wrap(structured, text, out.error.is_some());
