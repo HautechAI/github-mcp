@@ -21,7 +21,7 @@ Notes
 | list_pr_commits_light | ~180 bytes | N/A | N/A | Minimal commit info per PR; excludes files/patch/verification. No dedicated official tool in this server. |
 | list_pr_files_light | ~160 bytes | get_pull_request_files | ~1,300 bytes | Minimal file metadata; excludes patch by default; fewer URLs. |
 | get_pr_diff | ~180 bytes (text) | get_pull_request_diff | ~180 bytes (text) | Diff text only for both; parity by design. |
-| get_pr_patch | ~540 bytes (text) | get_pull_request_files (patch in files) | ~540 bytes (text via patch API) | Patch text only for both; parity by design. |
+| get_pr_patch | ~540 bytes (text) | get_pull_request_patch | ~540 bytes (text) | Patch text only for both; parity by design. |
 | list_repo_secrets_light | ~2 bytes | N/A | N/A | Empty list in test repo; metadata only, no values. |
 | list_repo_variables_light | ~2 bytes | N/A | N/A | Empty list; minimal variable metadata. |
 | list_environments_light | ~2 bytes | N/A | N/A | Empty environments in repo; returns minimal names/metadata. |
@@ -31,4 +31,3 @@ Caveats
 - Some newgithub_* review-thread endpoints returned tool errors during this run; sizes marked N/A with reasons. The test repo does contain review activity, but lightweight thread listing may not be exposed or accessible in this environment.
 - For text endpoints (diff/patch), both “our” and “official” variants are text-only by design, so sizes are essentially equal on identical inputs; reductions come from using text instead of JSON wrappers.
 - Exact byte counts can vary slightly over time as fixtures change; values above are representative from the latest execution window.
-
