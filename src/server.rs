@@ -1540,7 +1540,6 @@ fn handle_list_environments(id: Option<Id>, params: Value) -> Response {
         );
         #[derive(Deserialize)]
         struct Resp {
-            total_count: Option<i64>,
             environments: Vec<Env>,
         }
         #[derive(Deserialize)]
