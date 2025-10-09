@@ -7,7 +7,7 @@ Notes
 
 | Our method | Our response size | Official method | Official response size | Note |
 | --- | --- | --- | --- | --- |
-| list_issues | N/A | list_issues | 3704 | newgithub trims *_url fields, returns compact user (login only), reduces label/user payloads, and simplifies pagination cursors. |
+| list_issues | N/A | list_issues | 3704 | newgithub trims *_url fields, returns compact user (login only), reduces label/user payloads, and simplifies pagination cursors (official schema required state=OPEN). |
 | get_issue | N/A | get_issue | 2429 | newgithub omits many link fields and returns compact user/label objects. |
 | list_issue_comments_plain | N/A | get_issue_comments | 1622 | “plain” reduces comment fields (no nested user details beyond login), drops reaction URLs and misc metadata. |
 | list_pull_requests | N/A | list_pull_requests | 9498 | newgithub removes many repo/link subobjects and returns compact user; fewer nested *_url fields. |
