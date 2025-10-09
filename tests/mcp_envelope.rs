@@ -84,7 +84,10 @@ fn mcp_envelope_success_and_error_and_ping_gating() -> anyhow::Result<()> {
     let ping_out = run_with_env(&ping_call, &[])?;
     // Expect JSON-RPC error -32601
     let v: serde_json::Value = serde_json::from_str(&ping_out)?;
-    assert!(v.get("error").is_some(), "expected error for ping when disabled");
+    assert!(
+        v.get("error").is_some(),
+        "expected error for ping when disabled"
+    );
     assert_eq!(v["error"]["code"], -32601);
 
     // Gating: when enabled => ping listed and callable
