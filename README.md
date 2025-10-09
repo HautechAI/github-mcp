@@ -10,9 +10,10 @@ Quickstart:
     - `echo '{"jsonrpc":"2.0","method":"initialize","id":1}' | cargo run -- --log-level warn`
   - Tools list
     - `echo '{"jsonrpc":"2.0","method":"tools/list","id":2}' | cargo run -- --log-level warn`
-  - Call ping
-    - `echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"ping","arguments":{"message":"hello"}},"id":3}' | cargo run -- --log-level warn`
-      - Note: responses now follow MCP tool result envelope with `content` and `structuredContent`.
+  - Ping tool (optional)
+    - Direct JSON-RPC method `ping` has been removed. Use `tools/call` with `GITHUB_MCP_ENABLE_PING=true` if you need a health check.
+    - Example (when enabled): `echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"ping","arguments":{"message":"hello"}},"id":3}' | cargo run -- --log-level warn`
+      - Responses follow MCP tool result envelope with `content` and `structuredContent`.
 
 Inspector CLI
 - You can validate end-to-end using the MCP Inspector:
@@ -26,6 +27,8 @@ Configuration
 - API version header: `GITHUB_API_VERSION` (default 2022-11-28).
 - HTTP timeout: `GITHUB_HTTP_TIMEOUT_SECS` (default 30).
 - User-Agent: `github-mcp/<version>` (set automatically).
+- Feature flags:
+  - `GITHUB_MCP_ENABLE_PING`: when truthy (`1/true/yes/on`), the built-in `ping` tool is listed and callable. Default OFF; when disabled, `tools/call ping` returns JSON-RPC error `-32601` and `tools/list` omits `ping`.
 
 Use with MCP Clients
 
@@ -169,7 +172,7 @@ MCP response envelope (breaking change)
   - `content`: array with one `{type:"text", text:"..."}` block for human-friendly display.
   - `structuredContent`: previous structured JSON payload preserved for programmatic clients.
   - `isError`: present and `true` when a tool-level error is included in `structuredContent.error`.
-- Example (ping):
+- Example (ping, when enabled):
 ```
 {
   "jsonrpc":"2.0",

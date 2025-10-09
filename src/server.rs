@@ -195,17 +195,6 @@ fn dispatch(req: Request) -> Response {
         "initialize" => handle_initialize(req.id),
         "tools/list" => handle_tools_list(req.id),
         "tools/call" => handle_tools_call(req.id, req.params),
-        "ping" => {
-            if !is_ping_enabled() {
-                return rpc_error(
-                    req.id,
-                    -32601,
-                    "Tool not found: ping (disabled)",
-                    None,
-                );
-            }
-            handle_ping(req.id, req.params)
-        }
         other => rpc_error(
             req.id,
             -32601,

@@ -66,5 +66,9 @@ All notable changes to this project will be documented in this file by Release P
 
 * **server:** bootstrap Rust crate + stdio JSON-RPC harness (initialize/tools/list/tools/call/ping); add tests; scaffold milestone 1 ([#9](https://github.com/HautechAI/github-mcp/issues/9)) ([3a6e842](https://github.com/HautechAI/github-mcp/commit/3a6e8425df0d1ba7de74eb4c1f849f15bf916d41))
 
+### Unreleased
+- feat: Gate built-in `ping` tool behind env flag `GITHUB_MCP_ENABLE_PING` (default OFF). When disabled, `ping` is omitted from `tools/list` and `tools/call ping` returns JSON-RPC `-32601` (Tool not found: ping (disabled)). Update tests, E2E, and docs. (fix [#64](https://github.com/HautechAI/github-mcp/issues/64))
+- breaking: Remove direct JSON-RPC method `ping`. Use `tools/call` with `GITHUB_MCP_ENABLE_PING=true` if you need `ping`.
+
 ## [Unreleased]
 - Initial project bootstrap and CI scaffolding.
