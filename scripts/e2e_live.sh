@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Live E2E harness for github-mcp using @modelcontextprotocol/inspector-cli.
+# Live E2E harness for github-mcp using a single persistent stdio JSON-RPC session.
 # - Validates MCP envelopes and key fields for each tool against a seeded repo.
 # - Read-mostly by default; mutation tools gated by E2E_ENABLE_MUTATIONS=true.
 # - Skips gracefully when fixtures are absent.
@@ -38,16 +38,65 @@ require_file() {
 
 require_tools() {
   command -v node >/dev/null 2>&1 || { echo "[e2e][fatal] node is required" | tee -a "$LOG" >&2; exit 1; }
-  command -v npx >/dev/null 2>&1 || { echo "[e2e][fatal] npx is required" | tee -a "$LOG" >&2; exit 1; }
 }
 
-inspector() {
-  local method="$1"; shift
-  # Try with timeout if present in CLI; fall back if older versions
-  if ! npx -y @modelcontextprotocol/inspector-cli --version >/dev/null 2>&1; then
-    echo "[e2e] installing inspector-cli on the fly" | tee -a "$LOG" >&2
+# Persistent session via Node helper (single stdio JSON-RPC session)
+SESSION_PID=""
+SESSION_OUT_FD=""
+SESSION_IN_FD=""
+
+session_start() {
+  if [ ! -f "$ROOT_DIR/scripts/e2e_session.js" ]; then
+    echo "[e2e][fatal] missing helper: scripts/e2e_session.js" | tee -a "$LOG" >&2
+    exit 1
   fi
-  npx -y @modelcontextprotocol/inspector-cli --cli "$BIN_PATH" --method "$method" "$@"
+  # Start Node helper as a coprocess; capture its stdin/stdout fds
+  coproc E2ESESSION ( node "$ROOT_DIR/scripts/e2e_session.js" --bin "$BIN_PATH" )
+  SESSION_PID=${E2ESESSION_PID:-}
+  SESSION_OUT_FD=${E2ESESSION[0]}
+  SESSION_IN_FD=${E2ESESSION[1]}
+  # Give it a moment to spawn and issue initialize internally
+  sleep 0.2
+}
+
+session_stop() {
+  if [ -n "$SESSION_IN_FD" ]; then
+    # Close stdin to allow graceful exit
+    exec {SESSION_IN_FD}>&-
+  fi
+  if [ -n "$SESSION_OUT_FD" ]; then
+    # Close read end
+    exec {SESSION_OUT_FD}<&-
+  fi
+  if [ -n "$SESSION_PID" ]; then
+    wait "$SESSION_PID" || true
+  fi
+}
+
+# Send one request over the persistent session and capture the single-line JSON response
+session_call() {
+  local method="$1"; shift
+  local params_json="$1"; shift || true
+  local out_var="$1"; shift || true
+  local req
+  req=$(node -e "process.stdout.write(JSON.stringify({method: '$method', params: $params_json || {}}))")
+  # Write request
+  if ! printf '%s\n' "$req" >&${SESSION_IN_FD}; then
+    echo "[e2e][fatal] failed to write to session (method=$method)" | tee -a "$LOG" >&2
+    return 1
+  fi
+  # Read single response line with timeout
+  local line
+  if ! IFS= read -r -t 30 line <&${SESSION_OUT_FD}; then
+    echo "[e2e][fatal] timeout/no response for $method" | tee -a "$LOG" >&2
+    return 1
+  fi
+  # Optionally export into a variable name
+  if [ -n "$out_var" ]; then
+    printf -v "$out_var" '%s' "$line"
+  else
+    echo "$line"
+  fi
 }
 
 save_json() {
@@ -117,9 +166,12 @@ NODE
 require_file
 require_tools
 
-# tools/list (implicit handshake occurs inside inspector-cli)
+session_start
+
+# tools/list (handshake handled by session helper)
 echo "[e2e] tools/list" | tee -a "$LOG" >&2
-inspector tools/list | save_json "$ROOT_DIR/out-tools.json"
+if ! session_call "tools/list" "{}" RESP; then session_stop; exit 1; fi
+printf '%s' "$RESP" | save_json "$ROOT_DIR/out-tools.json"
 assert_has_field "$ROOT_DIR/out-tools.json" "Array.isArray(o.tools)?o.tools.length:o.length"
 
 # Optional: verify handshake was observed in diag log (non-fatal)
@@ -137,7 +189,11 @@ tool_call() {
   local args_json="$1"; shift
   local out="$ROOT_DIR/out-${name}.json"
   echo "[e2e] tools/call ${name} ${args_json}" | tee -a "$LOG" >&2
-  inspector tools/call --name "$name" --arguments "$args_json" | save_json "$out"
+  local resp
+  # inspector semantics: tools/call returns {result:{content:[], structuredContent:...}}
+  if ! session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name: '$name', arguments: $args_json}))")" resp; then
+    session_stop; exit 1; fi
+  printf '%s' "$resp" | save_json "$out"
   assert_envelope_ok "$out"
 }
 
@@ -241,9 +297,12 @@ NODE
 
   if [ "$ENABLE_MUTATIONS" = "true" ]; then
     echo "[e2e] mutations enabled; attempting rerun/cancel (best-effort)" | tee -a "$LOG" >&2
-    inspector tools/call --name rerun_workflow_run --arguments "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID}" | save_json "$ROOT_DIR/out-rerun_workflow_run.json" || true
-    inspector tools/call --name rerun_workflow_run_failed --arguments "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID}" | save_json "$ROOT_DIR/out-rerun_workflow_run_failed.json" || true
-    inspector tools/call --name cancel_workflow_run --arguments "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID}" | save_json "$ROOT_DIR/out-cancel_workflow_run.json" || true
+    session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name:'rerun_workflow_run',arguments:{owner:'$OWNER',repo:'$REPO',run_id:$LATEST_RUN_ID}}))")" resp || true
+    [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-rerun_workflow_run.json" || true
+    session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name:'rerun_workflow_run_failed',arguments:{owner:'$OWNER',repo:'$REPO',run_id:$LATEST_RUN_ID}}))")" resp || true
+    [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-rerun_workflow_run_failed.json" || true
+    session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name:'cancel_workflow_run',arguments:{owner:'$OWNER',repo:'$REPO',run_id:$LATEST_RUN_ID}}))")" resp || true
+    [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-cancel_workflow_run.json" || true
   fi
 else
   echo "[e2e] no workflow runs found; skipping downstream actions checks" | tee -a "$LOG" >&2
@@ -261,11 +320,16 @@ try{
 NODE
 )
   if [ -n "$THREAD_ID" ] && [ "$THREAD_ID" != "null" ]; then
-    inspector tools/call --name resolve_pr_review_thread --arguments "{\"thread_id\":\"$THREAD_ID\"}" | save_json "$ROOT_DIR/out-resolve_pr_review_thread.json" || true
-    inspector tools/call --name unresolve_pr_review_thread --arguments "{\"thread_id\":\"$THREAD_ID\"}" | save_json "$ROOT_DIR/out-unresolve_pr_review_thread.json" || true
+    session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name:'resolve_pr_review_thread',arguments:{thread_id:'$THREAD_ID'}}))")" resp || true
+    [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-resolve_pr_review_thread.json" || true
+    session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name:'unresolve_pr_review_thread',arguments:{thread_id:'$THREAD_ID'}}))")" resp || true
+    [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-unresolve_pr_review_thread.json" || true
   else
     echo "[e2e] skip resolve/unresolve (no thread)" | tee -a "$LOG" >&2
   fi
 fi
+
+# Cleanup session
+session_stop
 
 echo "[e2e] DONE" | tee -a "$LOG" >&2
