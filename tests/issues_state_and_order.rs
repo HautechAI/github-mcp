@@ -82,30 +82,28 @@ fn list_issues_order_by_mapping_created_asc() -> anyhow::Result<()> {
     let server = MockServer::start();
     // Verify orderBy variable is present and correct
     let _m = server.mock(|when, then| {
-        when.method(POST)
-            .path("/graphql")
-            .matches(|req| {
-                let body_bytes = req.body.as_deref().unwrap_or(&[]);
-                let body = std::str::from_utf8(body_bytes).unwrap_or("");
-                if let Ok(v) = serde_json::from_str::<serde_json::Value>(body) {
-                    if let Some(vars) = v.get("variables") {
-                        if let Some(ob) = vars.get("orderBy") {
-                            let field_ok = ob
-                                .get("field")
-                                .and_then(|x| x.as_str())
-                                .map(|s| s == "CREATED_AT")
-                                .unwrap_or(false);
-                            let dir_ok = ob
-                                .get("direction")
-                                .and_then(|x| x.as_str())
-                                .map(|s| s == "ASC")
-                                .unwrap_or(false);
-                            return field_ok && dir_ok;
-                        }
+        when.method(POST).path("/graphql").matches(|req| {
+            let body_bytes = req.body.as_deref().unwrap_or(&[]);
+            let body = std::str::from_utf8(body_bytes).unwrap_or("");
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(body) {
+                if let Some(vars) = v.get("variables") {
+                    if let Some(ob) = vars.get("orderBy") {
+                        let field_ok = ob
+                            .get("field")
+                            .and_then(|x| x.as_str())
+                            .map(|s| s == "CREATED_AT")
+                            .unwrap_or(false);
+                        let dir_ok = ob
+                            .get("direction")
+                            .and_then(|x| x.as_str())
+                            .map(|s| s == "ASC")
+                            .unwrap_or(false);
+                        return field_ok && dir_ok;
                     }
                 }
-                false
-            });
+            }
+            false
+        });
         then.status(200).json_body(serde_json::json!({
           "data": {
             "repository": {
