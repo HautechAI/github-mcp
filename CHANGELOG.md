@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file by Release Please.
 
+## [0.4.0](https://github.com/HautechAI/github-mcp/compare/v0.3.0...v0.4.0) (2025-10-09)
+
+
+### Features
+
+* e2e ([f98faca](https://github.com/HautechAI/github-mcp/commit/f98facacac8f408da6b0a8e54e9b749855e365b5))
+
 ## [0.3.0](https://github.com/HautechAI/github-mcp/compare/v0.2.1...v0.3.0) (2025-10-09)
 
 
