@@ -93,3 +93,52 @@ jobs:
             mcp-diag.log
             diag-smoke.log
             out-tools.json
+
+  e2e-live:
+    name: E2E (live)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [lint, test]
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build (release)
+        run: cargo build --release --locked
+
+      - name: Setup Node and Inspector
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Doppler secrets
+        uses: dopplerhq/cli-action@v2
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+      - name: Run E2E (read-only)
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          E2E_OWNER: HautechAI
+          E2E_REPO: github-mcp-test-repo
+          E2E_ISSUE_NUM: '10'
+          E2E_PR_NUM: '9'
+        run: |
+          set -euxo pipefail
+          doppler run -p github-mcp -c dev -- bash ./scripts/e2e_live.sh
+
+      - name: Upload E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-live-artifacts
+          path: |
+            mcp-diag.log
+            mcp-e2e.log
+            out-*.json

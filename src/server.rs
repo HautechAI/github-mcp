@@ -195,7 +195,6 @@ fn dispatch(req: Request) -> Response {
         "initialize" => handle_initialize(req.id),
         "tools/list" => handle_tools_list(req.id),
         "tools/call" => handle_tools_call(req.id, req.params),
-        "ping" => handle_ping(req.id, req.params),
         other => rpc_error(
             req.id,
             -32601,
@@ -223,7 +222,11 @@ fn handle_initialize(id: Option<Id>) -> Response {
 }
 
 fn handle_tools_list(id: Option<Id>) -> Response {
-    let tools = tool_descriptors();
+    let mut tools = tool_descriptors();
+    // Gate the built-in ping tool behind env flag
+    if !is_ping_enabled() {
+        tools.retain(|t| t.name != "ping");
+    }
     // Omit nextCursor when not paginating to align with MCP Inspector schema
     rpc_ok(id, serde_json::json!({ "tools": tools }))
 }
@@ -241,7 +244,12 @@ fn handle_tools_call(id: Option<Id>, params: Value) -> Response {
         return rpc_error(id, -32602, "Invalid params", None);
     };
     match call.name.as_str() {
-        "ping" => handle_ping(id, call.arguments),
+        "ping" => {
+            if !is_ping_enabled() {
+                return rpc_error(id, -32601, "Tool not found: ping (disabled)", None);
+            }
+            handle_ping(id, call.arguments)
+        }
         "list_issues" => handle_list_issues(id, call.arguments),
         "get_issue" => handle_get_issue(id, call.arguments),
         "list_issue_comments_plain" => handle_list_issue_comments(id, call.arguments),
@@ -286,6 +294,15 @@ fn handle_ping(id: Option<Id>, params: Value) -> Response {
     .unwrap();
     let wrapped = mcp_wrap(structured, Some(message), false);
     rpc_ok(id, wrapped)
+}
+
+fn is_ping_enabled() -> bool {
+    // Default OFF; truthy values: 1/true/yes/on (case-insensitive)
+    if let Ok(v) = std::env::var("GITHUB_MCP_ENABLE_PING") {
+        let s = v.trim().to_ascii_lowercase();
+        return matches!(s.as_str(), "1" | "true" | "yes" | "on");
+    }
+    false
 }
 
 fn enforce_limit(limit: Option<u32>) -> Result<u32, String> {
