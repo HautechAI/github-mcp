@@ -70,7 +70,7 @@ assert_has_field() {
     console.error(`[assert] missing/empty: ${expr}`); process.exit(6);
   }
   console.log(`[assert] field OK: ${expr}`);
-  NODE
+NODE
 }
 
 assert_envelope_ok() {
@@ -92,7 +92,7 @@ assert_envelope_ok() {
     console.error('[assert] missing structuredContent'); process.exit(5);
   }
   console.log('[assert] envelope OK');
-  NODE
+NODE
 }
 
 assert_is_error_code() {
@@ -110,7 +110,7 @@ assert_is_error_code() {
   if(!sc?.error?.code){ console.error('[assert] no error.code'); process.exit(8); }
   if(sc.error.code!==code){ console.error(`[assert] error.code ${sc.error.code} != ${code}`); process.exit(9); }
   console.log('[assert] error code OK');
-  NODE
+NODE
 }
 
 # Prepare
@@ -201,14 +201,15 @@ tool_call list_workflow_runs_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"p
 assert_has_field "$ROOT_DIR/out-list_workflow_runs_light.json" "Array.isArray(o.structuredContent?.items)" || echo "[e2e] no workflow runs; proceeding" | tee -a "$LOG"
 
 # Try to pick the newest run id for further checks
-LATEST_RUN_ID=$(node - <<'NODE'
+LATEST_RUN_ID=$(node - "$ROOT_DIR/out-list_workflow_runs_light.json" <<'NODE'
 const fs=require('fs');
 try{
   const o=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
   const res=o?.result??o; const items=res?.structuredContent?.items||[];
   const id = items[0]?.id || null; process.stdout.write(String(id||''));
 }catch{ process.stdout.write(''); }
-NODE "$ROOT_DIR/out-list_workflow_runs_light.json")
+NODE
+)
 
 if [ -n "$LATEST_RUN_ID" ]; then
   tool_call get_workflow_run_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID}"
@@ -217,14 +218,15 @@ if [ -n "$LATEST_RUN_ID" ]; then
   tool_call list_workflow_jobs_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID,\"per_page\":50,\"page\":1}"
   assert_has_field "$ROOT_DIR/out-list_workflow_jobs_light.json" "Array.isArray(o.structuredContent?.items)" || true
 
-  JOB_ID=$(node - <<'NODE'
+  JOB_ID=$(node - "$ROOT_DIR/out-list_workflow_jobs_light.json" <<'NODE'
 const fs=require('fs');
 try{
   const o=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
   const res=o?.result??o; const items=res?.structuredContent?.items||[];
   const id = items[0]?.id || null; process.stdout.write(String(id||''));
 }catch{ process.stdout.write(''); }
-NODE "$ROOT_DIR/out-list_workflow_jobs_light.json")
+NODE
+)
 
   if [ -n "$JOB_ID" ]; then
     tool_call get_workflow_job_logs "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"job_id\":$JOB_ID,\"tail_lines\":200,\"include_timestamps\":true}"
@@ -245,14 +247,15 @@ fi
 
 # Review thread resolve/unresolve are gated and require a thread id; we only attempt if non-empty.
 if [ "$ENABLE_MUTATIONS" = "true" ]; then
-  THREAD_ID=$(node - <<'NODE'
+  THREAD_ID=$(node - "$ROOT_DIR/out-list_pr_review_threads_light.json" <<'NODE'
 const fs=require('fs');
 try{
   const o=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
   const res=o?.result??o; const items=res?.structuredContent?.items||[];
   const id = items.find(x=>x?.id && x?.isResolved===false)?.id || items[0]?.id || null; process.stdout.write(String(id||''));
 }catch{ process.stdout.write(''); }
-NODE "$ROOT_DIR/out-list_pr_review_threads_light.json")
+NODE
+)
   if [ -n "$THREAD_ID" ] && [ "$THREAD_ID" != "null" ]; then
     inspector tools/call --name resolve_pr_review_thread --arguments "{\"thread_id\":\"$THREAD_ID\"}" | save_json "$ROOT_DIR/out-resolve_pr_review_thread.json" || true
     inspector tools/call --name unresolve_pr_review_thread --arguments "{\"thread_id\":\"$THREAD_ID\"}" | save_json "$ROOT_DIR/out-unresolve_pr_review_thread.json" || true
