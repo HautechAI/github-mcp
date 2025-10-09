@@ -331,9 +331,9 @@ fn handle_list_issues(id: Option<Id>, params: Value) -> Response {
     let (items, meta, err) = rt.block_on(async move {
         let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
         let query = r#"
-        query ListIssues($owner: String!, $repo: String!, $first: Int = 30, $after: String, $states: [IssueState!], $filterBy: IssueFilters) {
+        query ListIssues($owner: String!, $repo: String!, $first: Int = 30, $after: String, $states: [IssueState!], $filterBy: IssueFilters, $orderBy: IssueOrder) {
           repository(owner: $owner, name: $repo) {
-            issues(first: $first, after: $after, states: $states, filterBy: $filterBy) {
+            issues(first: $first, after: $after, states: $states, filterBy: $filterBy, orderBy: $orderBy) {
               nodes { id number title state createdAt updatedAt author { login } }
               pageInfo { hasNextPage endCursor }
             }
@@ -341,21 +341,47 @@ fn handle_list_issues(id: Option<Id>, params: Value) -> Response {
           rateLimit { remaining used resetAt }
         }
         "#;
-        let vars = serde_json::json!({
-            "owner": input.owner,
-            "repo": input.repo,
-            "first": limit as i64,
-            "after": input.cursor,
-            "states": input.state.map(|s| vec![s.to_uppercase()]),
-            "filterBy": {
-                "labels": input.labels,
-                "createdBy": input.creator,
-                "mentioned": input.mentions,
-                "assignee": input.assignee,
-                "since": input.since,
-                "orderBy": input.sort.map(|s| serde_json::json!({"field": s.to_uppercase(), "direction": input.direction.unwrap_or("desc".into()).to_uppercase()}))
-            }
+        // Build states mapping with special handling for "all" to omit the variable.
+        let states_var: Option<Vec<String>> = match input.state.as_deref() {
+            Some("open") => Some(vec!["OPEN".to_string()]),
+            Some("closed") => Some(vec!["CLOSED".to_string()]),
+            Some("all") => None, // omit to include both
+            None => None,
+            Some(_) => None,
+        };
+
+        // Map sort/direction to IssueOrder at top level
+        let order_by = input.sort.as_deref().map(|s| {
+            let field = match s {
+                "created" => "CREATED_AT",
+                "updated" => "UPDATED_AT",
+                "comments" => "COMMENTS",
+                _ => "UPDATED_AT",
+            };
+            let dir = input
+                .direction
+                .as_deref()
+                .unwrap_or("desc")
+                .to_ascii_uppercase();
+            serde_json::json!({ "field": field, "direction": dir })
         });
+
+        // Build variables object, omitting optional fields when None
+        let mut vars = serde_json::Map::new();
+        vars.insert("owner".into(), serde_json::Value::String(input.owner));
+        vars.insert("repo".into(), serde_json::Value::String(input.repo));
+        vars.insert("first".into(), serde_json::Value::Number((limit as i64).into()));
+        if let Some(after) = input.cursor { vars.insert("after".into(), serde_json::Value::String(after)); }
+        if let Some(st) = states_var { vars.insert("states".into(), serde_json::Value::Array(st.into_iter().map(serde_json::Value::String).collect())); }
+        let mut filter = serde_json::Map::new();
+        if let Some(labels) = input.labels { filter.insert("labels".into(), serde_json::Value::Array(labels.into_iter().map(serde_json::Value::String).collect())); }
+        if let Some(c) = input.creator { filter.insert("createdBy".into(), serde_json::Value::String(c)); }
+        if let Some(m) = input.mentions { filter.insert("mentioned".into(), serde_json::Value::String(m)); }
+        if let Some(a) = input.assignee { filter.insert("assignee".into(), serde_json::Value::String(a)); }
+        if let Some(since) = input.since { filter.insert("since".into(), serde_json::Value::String(since)); }
+        if !filter.is_empty() { vars.insert("filterBy".into(), serde_json::Value::Object(filter)); }
+        if let Some(ob) = order_by { vars.insert("orderBy".into(), ob); }
+        let vars = serde_json::Value::Object(vars);
         #[derive(Deserialize)]
         struct RespNode { id: String, number: i64, title: String, state: String, createdAt: String, updatedAt: String, author: Option<Author> }
         #[derive(Deserialize)]
