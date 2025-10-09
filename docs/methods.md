@@ -824,6 +824,7 @@ Inputs
 | --- | --- | --- | --- | --- | --- |
 | owner | string | yes |  |  |  |
 | repo | string | yes |  |  |  |
+| cursor | string | no |  |  | Opaque; server maps to REST page/per_page |
 | page | int | no |  |  | REST pagination |
 | per_page | int | no |  |  | REST pagination |
 
@@ -853,6 +854,7 @@ Inputs
 | --- | --- | --- | --- | --- | --- |
 | owner | string | yes |  |  |  |
 | repo | string | yes |  |  |  |
+| cursor | string | no |  |  | Opaque; server maps to REST page/per_page |
 | page | int | no |  |  | REST pagination |
 | per_page | int | no |  |  | REST pagination |
 
@@ -883,6 +885,7 @@ Inputs
 | --- | --- | --- | --- | --- | --- |
 | owner | string | yes |  |  |  |
 | repo | string | yes |  |  |  |
+| cursor | string | no |  |  | Opaque; server maps to REST page/per_page |
 | page | int | no |  |  | REST pagination |
 | per_page | int | no |  |  | REST pagination |
 
@@ -912,6 +915,7 @@ Inputs
 | owner | string | yes |  |  |  |
 | repo | string | yes |  |  |  |
 | environment_name | string | yes |  |  | URL-encoded by server in path |
+| cursor | string | no |  |  | Opaque; server maps to REST page/per_page |
 | page | int | no |  |  | REST pagination |
 | per_page | int | no |  |  | REST pagination |
 

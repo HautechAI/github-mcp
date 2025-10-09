@@ -12,7 +12,7 @@ Quick Links
 
 Guiding Principles
 - Keep payloads lean: avoid include_* flags unless needed (e.g., include_location for review comments; include_patch for files).
-- Paginate consciously: use small limits; follow meta.next_cursor when needed.
+- Paginate consciously: use small limits; follow meta.next_cursor when needed. For REST light tools you may also pass cursor instead of page/per_page; server maps it appropriately.
 - Escalate detail only as necessary (e.g., fetch diff/patch or logs after a quick summary view).
 
 ---

@@ -1318,7 +1318,7 @@ fn handle_list_repo_secrets(id: Option<Id>, params: Value) -> Response {
                 )
             }
         };
-        let (page, per_page, _cur) = parse_page_cursor(None, input.page, input.per_page);
+        let (page, per_page, _cur) = parse_page_cursor(input.cursor, input.page, input.per_page);
         let path = format!(
             "/repos/{}/{}/actions/secrets?per_page={}&page={}",
             input.owner, input.repo, per_page, page

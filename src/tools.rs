@@ -210,6 +210,7 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
             "properties":{
                 "owner":{"type":"string"},
                 "repo":{"type":"string"},
+                "cursor":{"type":"string"},
                 "page":{"type":"integer"},
                 "per_page":{"type":"integer"}
             },
@@ -224,6 +225,7 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
             "properties":{
                 "owner":{"type":"string"},
                 "repo":{"type":"string"},
+                "cursor":{"type":"string"},
                 "page":{"type":"integer"},
                 "per_page":{"type":"integer"}
             },
@@ -238,6 +240,7 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
             "properties":{
                 "owner":{"type":"string"},
                 "repo":{"type":"string"},
+                "cursor":{"type":"string"},
                 "page":{"type":"integer"},
                 "per_page":{"type":"integer"}
             },
@@ -253,6 +256,7 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
                 "owner":{"type":"string"},
                 "repo":{"type":"string"},
                 "environment_name":{"type":"string"},
+                "cursor":{"type":"string"},
                 "page":{"type":"integer"},
                 "per_page":{"type":"integer"}
             },
@@ -825,6 +829,7 @@ pub struct OkOutput {
 pub struct RepoInput {
     pub owner: String,
     pub repo: String,
+    pub cursor: Option<String>,
     pub page: Option<u32>,
     pub per_page: Option<u32>,
 }
@@ -833,6 +838,7 @@ pub struct EnvVarsInput {
     pub owner: String,
     pub repo: String,
     pub environment_name: String,
+    pub cursor: Option<String>,
     pub page: Option<u32>,
     pub per_page: Option<u32>,
 }
