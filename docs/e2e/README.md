@@ -41,7 +41,7 @@ CI integration
 
 Coverage map (tools)
 - initialize, tools/list — basic MCP handshake
-- ping — covered implicitly via envelope tests in unit/integration
+- ping — optional; gated by `GITHUB_MCP_ENABLE_PING` (default OFF). E2E does not rely on ping.
 - issues: list_issues, get_issue, list_issue_comments_plain
 - pull requests: list_pull_requests, get_pull_request, list_pr_comments_plain, list_pr_review_comments_plain, list_pr_review_threads_light, list_pr_reviews_light, list_pr_commits_light, list_pr_files_light, get_pr_diff, get_pr_patch, get_pr_status_summary
 - actions: list_workflows_light, list_workflow_runs_light, get_workflow_run_light, list_workflow_jobs_light, get_workflow_job_logs
@@ -51,4 +51,3 @@ Troubleshooting
 - No auth / 401: ensure GITHUB_TOKEN is set (via Doppler or env) and has repo read permissions for HautechAI/github-mcp-test-repo.
 - Inspector timeouts: the script retries minimal parts; rerun with `--log-level info` by setting `MCP_DIAG_LOG` to collect logs.
 - CI failures: download the artifacts and inspect `mcp-diag.log` and the corresponding `out-*.json` to see which assertion failed.
-

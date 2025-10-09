@@ -197,16 +197,20 @@ tool_call() {
   assert_envelope_ok "$out"
 }
 
-# Ping
-tool_call ping "{\"message\":\"ok\"}"
-assert_has_field "$ROOT_DIR/out-ping.json" "o.structuredContent?.message"
+# Ping: optional when enabled (GITHUB_MCP_ENABLE_PING truthy)
+if node -e "const v=(process.env.GITHUB_MCP_ENABLE_PING||'').toLowerCase(); process.exit(['1','true','yes','on'].includes(v)?0:1)"; then
+  tool_call ping "{\"message\":\"ok\"}"
+  assert_has_field "$ROOT_DIR/out-ping.json" "o.structuredContent?.message"
+else
+  echo "[e2e] ping disabled; skipping" | tee -a "$LOG" >&2
+fi
 
 # Issues
 tool_call list_issues "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"limit\":10,\"include_author\":true}"
 assert_has_field "$ROOT_DIR/out-list_issues.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0"
 
 tool_call get_issue "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$ISSUE_NUM,\"include_author\":true}"
-assert_has_field "$ROOT_DIR/out-get_issue.json" "o.structuredContent?.issue?.number"
+assert_has_field "$ROOT_DIR/out-get_issue.json" "o.structuredContent?.item?.number"
 
 tool_call list_issue_comments_plain "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$ISSUE_NUM,\"limit\":10}"
 assert_has_field "$ROOT_DIR/out-list_issue_comments_plain.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0" || echo "[e2e] note: issue may have zero comments; proceeding" | tee -a "$LOG" >&2
@@ -220,14 +224,14 @@ tool_call list_pull_requests "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"limit\"
 assert_has_field "$ROOT_DIR/out-list_pull_requests.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0"
 
 tool_call get_pull_request "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"include_author\":true}"
-assert_has_field "$ROOT_DIR/out-get_pull_request.json" "o.structuredContent?.pr?.number"
+assert_has_field "$ROOT_DIR/out-get_pull_request.json" "o.structuredContent?.item?.number"
 
 # Negative path: non-existent PR
 tool_call get_pull_request "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":999999}"
 assert_is_error_code "$ROOT_DIR/out-get_pull_request.json" "not_found" || echo "[e2e] negative path: get_pull_request not_found assertion failed (tolerated)" | tee -a "$LOG"
 
 tool_call get_pr_status_summary "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM}"
-assert_has_field "$ROOT_DIR/out-get_pr_status_summary.json" "Array.isArray(o.structuredContent?.statuses) ? o.structuredContent.statuses.length : (o.structuredContent?.status || o.structuredContent?.combined_state ? 1 : 0)" || echo "[e2e] status summary may be empty; proceeding" | tee -a "$LOG" >&2
+assert_has_field "$ROOT_DIR/out-get_pr_status_summary.json" "(o.structuredContent?.item?.overall_state || o.structuredContent?.item?.counts)" || echo "[e2e] status summary may be empty; proceeding" | tee -a "$LOG" >&2
 
 tool_call list_pr_comments_plain "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":10}"
 assert_has_field "$ROOT_DIR/out-list_pr_comments_plain.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0" || echo "[e2e] note: PR may have zero comments; proceeding" | tee -a "$LOG" >&2
@@ -273,7 +277,7 @@ NODE
 
 if [ -n "$LATEST_RUN_ID" ]; then
   tool_call get_workflow_run_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID}"
-  assert_has_field "$ROOT_DIR/out-get_workflow_run_light.json" "o.structuredContent?.run?.id" || true
+  assert_has_field "$ROOT_DIR/out-get_workflow_run_light.json" "o.structuredContent?.item?.id" || true
 
   tool_call list_workflow_jobs_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID,\"per_page\":50,\"page\":1}"
   assert_has_field "$ROOT_DIR/out-list_workflow_jobs_light.json" "Array.isArray(o.structuredContent?.items)" || true
