@@ -36,7 +36,9 @@ fn initialize_and_tools_list() -> anyhow::Result<()> {
     });
     let out = run(&list_req)?;
     assert!(out.contains("\"tools\""));
-    assert!(out.contains("\"ping\""));
+    // Assert presence of core GitHub tools (names may evolve; keep to read-only basics)
+    assert!(out.contains("\"list_issues\""));
+    assert!(out.contains("\"get_issue\""));
     // Ensure nextCursor is absent or a string (never null)
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     if let Some(result) = v.get("result") {
@@ -48,20 +50,5 @@ fn initialize_and_tools_list() -> anyhow::Result<()> {
             );
         }
     }
-
-    // tools/call ping (now MCP envelope)
-    let call_req = serde_json::json!({
-        "jsonrpc": "2.0",
-        "method": "tools/call",
-        "params": {"name": "ping", "arguments": {"message": "hello"}},
-        "id": 3
-    });
-    let out = run(&call_req)?;
-    // Expect MCP content envelope with text type
-    assert!(out.contains("\"content\""));
-    assert!(out.contains("\"type\":\"text\""));
-    assert!(out.contains("hello"));
-    // And structuredContent preserving previous shape
-    assert!(out.contains("\"structuredContent\""));
     Ok(())
 }

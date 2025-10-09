@@ -197,9 +197,13 @@ tool_call() {
   assert_envelope_ok "$out"
 }
 
-# Ping
-tool_call ping "{\"message\":\"ok\"}"
-assert_has_field "$ROOT_DIR/out-ping.json" "o.structuredContent?.message"
+# Ping: optional when enabled (GITHUB_MCP_ENABLE_PING truthy)
+if node -e "const v=(process.env.GITHUB_MCP_ENABLE_PING||'').toLowerCase(); process.exit(['1','true','yes','on'].includes(v)?0:1)"; then
+  tool_call ping "{\"message\":\"ok\"}"
+  assert_has_field "$ROOT_DIR/out-ping.json" "o.structuredContent?.message"
+else
+  echo "[e2e] ping disabled; skipping" | tee -a "$LOG" >&2
+fi
 
 # Issues
 tool_call list_issues "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"limit\":10,\"include_author\":true}"
