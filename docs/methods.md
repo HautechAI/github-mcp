@@ -482,6 +482,7 @@ query ListPrReviewComments(
 - Notes: Location fields are populated from PullRequestReviewComment and PullRequestReviewThread location fields. For thread-level grouping and resolution state, use [list_pr_review_threads_light](#tool-list_pr_review_threads_light).
 
 ## Tool: list_pr_review_threads_light
+Implementation note: GitHub GraphQL exposes thread location sides as diffSide/startDiffSide; server maps these to public side/start_side without changing the interface.
 Purpose: List PR review threads (grouped inline discussions) with minimal fields.
 
 Inputs

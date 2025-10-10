@@ -53,6 +53,104 @@ fn list_pr_comments_plain_happy() -> anyhow::Result<()> {
 }
 
 #[test]
+fn list_pr_review_threads_light_include_location_and_empty() -> anyhow::Result<()> {
+    // include_location true/false and empty threads
+    let server = MockServer::start();
+    // Empty threads response
+    let body_empty = serde_json::json!({
+      "data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": [], "pageInfo": {"hasNextPage": false, "endCursor": null}}}},
+      "rateLimit": {"remaining": 4999, "used": 1, "resetAt": "1970-01-01T00:00:00Z"}
+    });
+    let _m1 = server.mock(|when, then| {
+        when.method(POST).path("/graphql");
+        then.status(200).json_body(body_empty.clone());
+    });
+    let req1 = serde_json::json!({
+        "jsonrpc":"2.0","method":"tools/call","id":1,
+        "params":{"name":"list_pr_review_threads_light","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":true,"include_location":true}}
+    });
+    let out1 = run_with_env(
+        &req1,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_GRAPHQL_URL", &format!("{}/graphql", server.base_url())),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
+    assert!(out1.contains("\"structuredContent\""));
+    assert!(out1.contains("\"items\":[]"));
+
+    // include_location=false should also succeed with empty
+    let _m2 = server.mock(|when, then| {
+        when.method(POST).path("/graphql");
+        then.status(200).json_body(body_empty);
+    });
+    let req2 = serde_json::json!({
+        "jsonrpc":"2.0","method":"tools/call","id":2,
+        "params":{"name":"list_pr_review_threads_light","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":false,"include_location":false}}
+    });
+    let out2 = run_with_env(
+        &req2,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_GRAPHQL_URL", &format!("{}/graphql", server.base_url())),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
+    assert!(out2.contains("\"structuredContent\""));
+    assert!(out2.contains("\"items\":[]"));
+    Ok(())
+}
+
+#[test]
+fn list_pr_review_comments_plain_include_location_and_empty() -> anyhow::Result<()> {
+    let server = MockServer::start();
+    // Empty reviewComments, schema still returns rateLimit
+    let body_empty = serde_json::json!({
+      "data": {"repository": {"pullRequest": {"reviewComments": {"nodes": [], "pageInfo": {"hasNextPage": false, "endCursor": null}}}},
+      "rateLimit": {"remaining": 4999, "used": 1, "resetAt": "1970-01-01T00:00:00Z"}
+    });
+    let _m1 = server.mock(|when, then| {
+        when.method(POST).path("/graphql");
+        then.status(200).json_body(body_empty.clone());
+    });
+    let req1 = serde_json::json!({
+        "jsonrpc":"2.0","method":"tools/call","id":1,
+        "params":{"name":"list_pr_review_comments_plain","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":true,"include_location":true}}
+    });
+    let out1 = run_with_env(
+        &req1,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_GRAPHQL_URL", &format!("{}/graphql", server.base_url())),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
+    assert!(out1.contains("\"structuredContent\""));
+    assert!(out1.contains("\"items\":[]"));
+
+    // include_location=false also OK
+    let _m2 = server.mock(|when, then| {
+        when.method(POST).path("/graphql");
+        then.status(200).json_body(body_empty);
+    });
+    let req2 = serde_json::json!({
+        "jsonrpc":"2.0","method":"tools/call","id":2,
+        "params":{"name":"list_pr_review_comments_plain","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":false,"include_location":false}}
+    });
+    let out2 = run_with_env(
+        &req2,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_GRAPHQL_URL", &format!("{}/graphql", server.base_url())),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
+    assert!(out2.contains("\"structuredContent\""));
+    assert!(out2.contains("\"items\":[]"));
+    Ok(())
+}
+#[test]
 fn get_pr_diff_and_patch_rest_headers() -> anyhow::Result<()> {
     let server = MockServer::start();
     let _m1 = server.mock(|when, then| {

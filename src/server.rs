@@ -1965,7 +1965,7 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
                   id body createdAt updatedAt author { login }
                   path diffHunk line startLine side startSide originalLine originalStartLine
                   commit { oid } originalCommit { oid }
-                  pullRequestReviewThread { path line startLine side startSide }
+                  pullRequestReviewThread { path line startLine diffSide startDiffSide }
                 }
                 pageInfo { hasNextPage endCursor }
               }
@@ -1977,7 +1977,7 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
         #[derive(Deserialize)] struct Author { login: String }
         #[derive(Deserialize)] struct Commit { oid: String }
         #[derive(Deserialize)] struct Node { id: String, body: String, createdAt: String, updatedAt: String, author: Option<Author>, path: Option<String>, diffHunk: Option<String>, line: Option<i64>, startLine: Option<i64>, side: Option<String>, startSide: Option<String>, originalLine: Option<i64>, originalStartLine: Option<i64>, commit: Option<Commit>, originalCommit: Option<Commit>, pullRequestReviewThread: Option<ThreadLoc> }
-        #[derive(Deserialize)] struct ThreadLoc { path: Option<String>, line: Option<i64>, startLine: Option<i64>, side: Option<String>, startSide: Option<String> }
+        #[derive(Deserialize)] struct ThreadLoc { path: Option<String>, line: Option<i64>, startLine: Option<i64>, diffSide: Option<String>, startDiffSide: Option<String> }
         #[derive(Deserialize)] struct PageInfo { hasNextPage: bool, endCursor: Option<String> }
         #[derive(Deserialize)] struct RC { nodes: Vec<Node>, pageInfo: PageInfo }
         #[derive(Deserialize)] struct PR { reviewComments: RC }
@@ -2000,8 +2000,9 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
                 path: if include_loc { n.path.or_else(|| t.and_then(|tr| tr.path.clone())) } else { None },
                 line: if include_loc { n.line.or_else(|| t.and_then(|tr| tr.line)) } else { None },
                 start_line: if include_loc { n.startLine.or_else(|| t.and_then(|tr| tr.startLine)) } else { None },
-                side: if include_loc { map_side(n.side.or_else(|| t.and_then(|tr| tr.side.clone()))) } else { None },
-                start_side: if include_loc { map_side(n.startSide.or_else(|| t.and_then(|tr| tr.startSide.clone()))) } else { None },
+                // Prefer comment-level side/startSide; fallback to thread-level diffSide/startDiffSide
+                side: if include_loc { map_side(n.side.or_else(|| t.and_then(|tr| tr.diffSide.clone()))) } else { None },
+                start_side: if include_loc { map_side(n.startSide.or_else(|| t.and_then(|tr| tr.startDiffSide.clone()))) } else { None },
                 original_line: if include_loc { n.originalLine } else { None },
                 original_start_line: if include_loc { n.originalStartLine } else { None },
                 diff_hunk: if include_loc { n.diffHunk } else { None },
@@ -2052,7 +2053,7 @@ fn handle_list_pr_review_threads(id: Option<Id>, params: Value) -> Response {
               reviewThreads(first: $first, after: $after) {
                 nodes {
                   id isResolved isOutdated comments { totalCount } resolvedBy { login }
-                  path line startLine side startSide
+                  path line startLine diffSide startDiffSide
                 }
                 pageInfo { hasNextPage endCursor }
               }
@@ -2062,7 +2063,7 @@ fn handle_list_pr_review_threads(id: Option<Id>, params: Value) -> Response {
         }
         "#;
         #[derive(Deserialize)] struct Author { login: String }
-        #[derive(Deserialize)] struct Node { id: String, isResolved: bool, isOutdated: bool, comments: Count, resolvedBy: Option<Author>, path: Option<String>, line: Option<i64>, startLine: Option<i64>, side: Option<String>, startSide: Option<String> }
+        #[derive(Deserialize)] struct Node { id: String, isResolved: bool, isOutdated: bool, comments: Count, resolvedBy: Option<Author>, path: Option<String>, line: Option<i64>, startLine: Option<i64>, diffSide: Option<String>, startDiffSide: Option<String> }
         #[derive(Deserialize)] struct Count { totalCount: i64 }
         #[derive(Deserialize)] struct PageInfo { hasNextPage: bool, endCursor: Option<String> }
         #[derive(Deserialize)] struct Threads { nodes: Vec<Node>, pageInfo: PageInfo }
@@ -2084,8 +2085,8 @@ fn handle_list_pr_review_threads(id: Option<Id>, params: Value) -> Response {
             path: if include_loc { n.path } else { None },
             line: if include_loc { n.line } else { None },
             start_line: if include_loc { n.startLine } else { None },
-            side: if include_loc { map_side(n.side) } else { None },
-            start_side: if include_loc { map_side(n.startSide) } else { None },
+            side: if include_loc { map_side(n.diffSide) } else { None },
+            start_side: if include_loc { map_side(n.startDiffSide) } else { None },
         }).collect();
         let meta = Meta { next_cursor: pr.reviewThreads.pageInfo.endCursor, has_more: pr.reviewThreads.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
