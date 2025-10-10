@@ -236,7 +236,9 @@ assert_has_field "$ROOT_DIR/out-get_pr_status_summary.json" "(o.structuredConten
 tool_call list_pr_comments_plain "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":10}"
 assert_has_field "$ROOT_DIR/out-list_pr_comments_plain.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0" || echo "[e2e] note: PR may have zero comments; proceeding" | tee -a "$LOG" >&2
 
-tool_call list_pr_review_comments_plain "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":10}"
+tool_call list_pr_review_comments_plain "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":3}"
+assert_has_field "$ROOT_DIR/out-list_pr_review_comments_plain.json" "Array.isArray(o.structuredContent?.items)"
+tool_call list_pr_review_comments_plain "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":3,\"include_author\":true,\"include_location\":true}"
 assert_has_field "$ROOT_DIR/out-list_pr_review_comments_plain.json" "Array.isArray(o.structuredContent?.items)"
 
 tool_call list_pr_review_threads_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":10}"
