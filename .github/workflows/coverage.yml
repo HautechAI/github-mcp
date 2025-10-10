@@ -1,0 +1,150 @@
+name: Coverage
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  coverage:
+    name: Test & Coverage
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+      LIVE_API_TESTS: ${{ vars.LIVE_API_TESTS }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov@0.6.9
+
+      - name: Install nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.68
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run tests with coverage (lcov)
+        run: |
+          set -euxo pipefail
+          NEXT_ARGS=""
+          if [ "${LIVE_API_TESTS:-}" = "1" ] && [ -n "${GITHUB_TOKEN:-}" ]; then
+            echo "Enabling live tests (include ignored)."
+            export LIVE_API_TESTS=1
+            NEXT_ARGS="-- --run-ignored yes --jobs=2"
+          fi
+          cargo llvm-cov nextest \
+            --workspace \
+            --lcov --output-path lcov.info \
+            --no-fail-fast \
+            --ignore-filename-regex '(.cargo/registry|target/|tests/live/)' \
+            ${NEXT_ARGS}
+
+      - name: Run tests with coverage (json)
+        run: |
+          set -euxo pipefail
+          NEXT_ARGS=""
+          if [ "${LIVE_API_TESTS:-}" = "1" ] && [ -n "${GITHUB_TOKEN:-}" ]; then
+            echo "Enabling live tests (include ignored)."
+            export LIVE_API_TESTS=1
+            NEXT_ARGS="-- --run-ignored yes --jobs=2"
+          fi
+          cargo llvm-cov nextest \
+            --workspace \
+            --json --output-path coverage.json \
+            --no-fail-fast \
+            --ignore-filename-regex '(.cargo/registry|target/|tests/live/)' \
+            ${NEXT_ARGS}
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-artifacts
+          path: |
+            lcov.info
+            coverage.json
+
+      - name: Determine changed files (PR only)
+        id: changed
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const resp = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 300,
+            });
+            const files = resp.data.map(f => f.filename).filter(f => f.endsWith('.rs'));
+            core.setOutput('files', JSON.stringify(files));
+            core.setOutput('sha', pr.head.sha);
+
+      - name: Generate uncovered-lines table
+        id: gaps
+        run: |
+          set -euxo pipefail
+          node scripts/report_coverage_gaps.mjs coverage.json > coverage_gaps.md
+        env:
+          CHANGED_FILES_JSON: ${{ steps.changed.outputs.files || '[]' }}
+          REPO: ${{ github.repository }}
+          COMMIT_SHA: ${{ steps.changed.outputs.sha || github.sha }}
+
+      - name: Append table to summary
+        run: |
+          echo '## Coverage gaps (changed files)' >> "$GITHUB_STEP_SUMMARY"
+          cat coverage_gaps.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on PR with coverage gaps
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('coverage_gaps.md', 'utf8');
+            const pr = context.payload.pull_request;
+            const marker = '<!-- coverage-gaps-table -->';
+            const finalBody = `${marker}\n${body}`;
+            // Find existing comment by bot
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              per_page: 100,
+            });
+            const existing = comments.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: finalBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: finalBody,
+              });
+            }
