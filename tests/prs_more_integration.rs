@@ -134,9 +134,9 @@ fn list_pr_review_comments_plain_include_location_and_empty() -> anyhow::Result<
     let _m1 = server.mock(|when, then| {
         when.method(GET).path("/repos/o/r/pulls/1/comments");
         then.status(200)
-            .header("x-ratelimit-remaining","4999")
-            .header("x-ratelimit-used","1")
-            .header("x-ratelimit-reset","0")
+            .header("x-ratelimit-remaining", "4999")
+            .header("x-ratelimit-used", "1")
+            .header("x-ratelimit-reset", "0")
             .json_body(serde_json::json!([]));
     });
     let req1 = serde_json::json!({
@@ -193,10 +193,17 @@ fn list_pr_review_comments_plain_pagination_and_flags() -> anyhow::Result<()> {
     });
     let out1 = run_with_env(
         &req1,
-        &[("GITHUB_TOKEN", "t"), ("GITHUB_API_URL", server.base_url().as_str())],
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
     )?;
     let v1: serde_json::Value = serde_json::from_str(&out1)?;
-    let sc1 = v1.get("result").and_then(|r| r.get("structuredContent")).cloned().unwrap_or_default();
+    let sc1 = v1
+        .get("result")
+        .and_then(|r| r.get("structuredContent"))
+        .cloned()
+        .unwrap_or_default();
     assert_eq!(sc1["items"].as_array().unwrap().len(), 2);
     assert_eq!(sc1["items"][0]["author_login"].as_str().unwrap(), "alice");
     assert_eq!(sc1["items"][0]["side"].as_str().unwrap(), "RIGHT");
@@ -218,10 +225,17 @@ fn list_pr_review_comments_plain_pagination_and_flags() -> anyhow::Result<()> {
     });
     let out2 = run_with_env(
         &req2,
-        &[("GITHUB_TOKEN", "t"), ("GITHUB_API_URL", server.base_url().as_str())],
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
     )?;
     let v2: serde_json::Value = serde_json::from_str(&out2)?;
-    let sc2 = v2.get("result").and_then(|r| r.get("structuredContent")).cloned().unwrap_or_default();
+    let sc2 = v2
+        .get("result")
+        .and_then(|r| r.get("structuredContent"))
+        .cloned()
+        .unwrap_or_default();
     assert_eq!(sc2["items"].as_array().unwrap().len(), 1);
     // When no more pages, default behavior prunes meta
     assert!(sc2.get("meta").is_none());

@@ -1975,8 +1975,16 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
             Err(e) => {
                 return (
                     None,
-                    Meta { next_cursor: None, has_more: false, rate: None },
-                    Some(ErrorShape { code: "server_error".into(), message: e.to_string(), retriable: false })
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
                 )
             }
         };
@@ -1996,7 +2004,9 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
             input.owner, input.repo, input.number, per_page, page
         );
         #[derive(Deserialize)]
-        struct RestUser { login: String }
+        struct RestUser {
+            login: String,
+        }
         #[derive(Deserialize)]
         struct RestReviewComment {
             id: Option<i64>,
@@ -2021,34 +2031,63 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
         if let Some(err) = resp.error {
             return (
                 None,
-                Meta { next_cursor: None, has_more: false, rate: resp.meta.rate },
-                Some(ErrorShape { code: err.code, message: err.message, retriable: err.retriable })
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
             );
         }
         let rate = resp.meta.rate;
         let include_author = input.include_author.unwrap_or(false);
         let include_loc = input.include_location.unwrap_or(false);
         let items = resp.value.map(|arr| {
-            arr.into_iter().map(|n| {
-                let id = n.node_id.clone().unwrap_or_else(|| n.id.map(|i| i.to_string()).unwrap_or_default());
-                ReviewCommentItem {
-                    id,
-                    body: n.body,
-                    created_at: n.created_at,
-                    updated_at: n.updated_at,
-                    author_login: if include_author { n.user.map(|u| u.login) } else { None },
-                    path: if include_loc { n.path } else { None },
-                    line: if include_loc { n.line } else { None },
-                    start_line: if include_loc { n.start_line } else { None },
-                    side: if include_loc { map_side(n.side) } else { None },
-                    start_side: if include_loc { map_side(n.start_side) } else { None },
-                    original_line: if include_loc { n.original_line } else { None },
-                    original_start_line: if include_loc { n.original_start_line } else { None },
-                    diff_hunk: if include_loc { n.diff_hunk } else { None },
-                    commit_sha: if include_loc { n.commit_id } else { None },
-                    original_commit_sha: if include_loc { n.original_commit_id } else { None },
-                }
-            }).collect::<Vec<ReviewCommentItem>>()
+            arr.into_iter()
+                .map(|n| {
+                    let id = n
+                        .node_id
+                        .clone()
+                        .unwrap_or_else(|| n.id.map(|i| i.to_string()).unwrap_or_default());
+                    ReviewCommentItem {
+                        id,
+                        body: n.body,
+                        created_at: n.created_at,
+                        updated_at: n.updated_at,
+                        author_login: if include_author {
+                            n.user.map(|u| u.login)
+                        } else {
+                            None
+                        },
+                        path: if include_loc { n.path } else { None },
+                        line: if include_loc { n.line } else { None },
+                        start_line: if include_loc { n.start_line } else { None },
+                        side: if include_loc { map_side(n.side) } else { None },
+                        start_side: if include_loc {
+                            map_side(n.start_side)
+                        } else {
+                            None
+                        },
+                        original_line: if include_loc { n.original_line } else { None },
+                        original_start_line: if include_loc {
+                            n.original_start_line
+                        } else {
+                            None
+                        },
+                        diff_hunk: if include_loc { n.diff_hunk } else { None },
+                        commit_sha: if include_loc { n.commit_id } else { None },
+                        original_commit_sha: if include_loc {
+                            n.original_commit_id
+                        } else {
+                            None
+                        },
+                    }
+                })
+                .collect::<Vec<ReviewCommentItem>>()
         });
         // Pagination via Link header
         let has_more = resp
@@ -2057,11 +2096,20 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
             .map(http::has_next_page_from_link)
             .unwrap_or(false);
         let next_cursor = if has_more {
-            Some(http::encode_rest_cursor(http::RestCursor { page: page + 1, per_page }))
-        } else { None };
+            Some(http::encode_rest_cursor(http::RestCursor {
+                page: page + 1,
+                per_page,
+            }))
+        } else {
+            None
+        };
         (
             items,
-            Meta { next_cursor, has_more, rate },
+            Meta {
+                next_cursor,
+                has_more,
+                rate,
+            },
             None,
         )
     });
