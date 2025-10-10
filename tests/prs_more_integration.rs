@@ -74,7 +74,10 @@ fn list_pr_review_comments_plain_minimal() -> anyhow::Result<()> {
         &req_min,
         &[
             ("GITHUB_TOKEN", "t"),
-            ("GITHUB_GRAPHQL_URL", &format!("{}/graphql", server.base_url())),
+            (
+                "GITHUB_GRAPHQL_URL",
+                &format!("{}/graphql", server.base_url()),
+            ),
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
@@ -112,7 +115,10 @@ fn list_pr_review_comments_plain_with_location() -> anyhow::Result<()> {
         &req_loc,
         &[
             ("GITHUB_TOKEN", "t"),
-            ("GITHUB_GRAPHQL_URL", &format!("{}/graphql", server.base_url())),
+            (
+                "GITHUB_GRAPHQL_URL",
+                &format!("{}/graphql", server.base_url()),
+            ),
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
@@ -144,7 +150,10 @@ fn list_pr_review_threads_light_minimal() -> anyhow::Result<()> {
         &req_min,
         &[
             ("GITHUB_TOKEN", "t"),
-            ("GITHUB_GRAPHQL_URL", &format!("{}/graphql", server.base_url())),
+            (
+                "GITHUB_GRAPHQL_URL",
+                &format!("{}/graphql", server.base_url()),
+            ),
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
@@ -176,7 +185,10 @@ fn list_pr_review_threads_light_with_location() -> anyhow::Result<()> {
         &req_loc,
         &[
             ("GITHUB_TOKEN", "t"),
-            ("GITHUB_GRAPHQL_URL", &format!("{}/graphql", server.base_url())),
+            (
+                "GITHUB_GRAPHQL_URL",
+                &format!("{}/graphql", server.base_url()),
+            ),
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
