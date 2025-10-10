@@ -3,7 +3,8 @@ use std::cell::Cell;
 
 // Thread-local flag indicating whether to include rate meta in outputs for the current tools/call.
 thread_local! {
-    static INCLUDE_RATE: Cell<bool> = Cell::new(false);
+    // Use const initializer to satisfy clippy::missing_const_for_thread_local (Rust 1.90).
+    static INCLUDE_RATE: Cell<bool> = const { Cell::new(false) };
 }
 
 // Set the include-rate flag for the current thread (one tools/call invocation).
