@@ -20,9 +20,15 @@ fn current_include_rate() -> bool {
 // - When include_rate is false: drop rate.
 // - Drop meta entirely if it becomes empty.
 fn prune_meta(structured: &mut Value, include_rate: bool) {
-    let Some(obj) = structured.as_object_mut() else { return; };
-    let Some(meta_val) = obj.get_mut("meta") else { return; };
-    let Some(meta_obj) = meta_val.as_object_mut() else { return; };
+    let Some(obj) = structured.as_object_mut() else {
+        return;
+    };
+    let Some(meta_val) = obj.get_mut("meta") else {
+        return;
+    };
+    let Some(meta_obj) = meta_val.as_object_mut() else {
+        return;
+    };
 
     let has_more = meta_obj
         .get("has_more")
