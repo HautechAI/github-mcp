@@ -54,12 +54,10 @@ fn list_pr_comments_plain_happy() -> anyhow::Result<()> {
     let sc = v
         .get("result")
         .and_then(|r| r.get("structuredContent"))
-        .cloned()
-        .unwrap_or_default();
+        .and_then(|sc| sc.as_object());
     assert!(
-        sc.get("meta").is_none(),
-        "expected meta to be omitted when has_more=false and include_rate not requested: {}",
-        sc
+        sc.and_then(|o| o.get("meta")).is_none(),
+        "expected meta to be omitted when has_more=false and include_rate not requested"
     );
     Ok(())
 }

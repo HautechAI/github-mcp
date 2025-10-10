@@ -174,6 +174,31 @@ Output shaping
   - Rate limit metadata is excluded by default.
 - Opt-in rate metadata per call by adding `_include_rate: true` to the top-level tool arguments. When set, `meta.rate` is included; pagination keys are included only when relevant.
 
+Example
+- Request (include rate):
+```
+{"jsonrpc":"2.0","method":"tools/call","id":1,
+ "params":{"name":"list_workflow_runs_light",
+           "arguments":{"owner":"octo","repo":"hello","per_page":30,"_include_rate":true}}}
+```
+- Response (excerpt):
+```
+{
+  "result": {
+    "content": [{"type":"text","text":"0 workflow runs"}],
+    "structuredContent": {
+      "items": [],
+      "meta": {
+        "has_more": true,
+        "next_cursor": "...",
+        "rate": {"remaining": 4999, "used": 1, "reset_at": "..."}
+      }
+    }
+  }
+}
+```
+When `_include_rate` is omitted or `false`, `meta.rate` is omitted. If `has_more` is false, `has_more` and `next_cursor` are also omitted and `meta` may be removed entirely.
+
 MCP response envelope (breaking change)
 - tools/call results are wrapped:
   - `content`: array with one `{type:"text", text:"..."}` block for human-friendly display.

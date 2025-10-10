@@ -48,8 +48,14 @@ fn rest_pagination_link_headers() -> anyhow::Result<()> {
     assert!(out.contains("\"structuredContent\""));
     assert!(out.contains("\"has_more\":true"));
     assert!(out.contains("next_cursor"));
-    // Default should omit rate
-    assert!(!out.contains("\"rate\""));
+    // Default should omit rate (assert on structured JSON to avoid false positives)
+    let v: serde_json::Value = serde_json::from_str(&out)?;
+    let sc = v
+        .get("result")
+        .and_then(|r| r.get("structuredContent"))
+        .cloned()
+        .unwrap_or_default();
+    assert!(sc.get("meta").and_then(|m| m.get("rate")).is_none());
 
     // With _include_rate=true: rate should appear in meta
     let req_inc = serde_json::json!({
@@ -63,7 +69,13 @@ fn rest_pagination_link_headers() -> anyhow::Result<()> {
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
-    assert!(out_inc.contains("\"rate\""));
+    let v_inc: serde_json::Value = serde_json::from_str(&out_inc)?;
+    let sc_inc = v_inc
+        .get("result")
+        .and_then(|r| r.get("structuredContent"))
+        .cloned()
+        .unwrap_or_default();
+    assert!(sc_inc.get("meta").and_then(|m| m.get("rate")).is_some());
     Ok(())
 }
 

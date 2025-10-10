@@ -2,6 +2,8 @@ use serde_json::Value;
 use std::cell::Cell;
 
 // Thread-local flag indicating whether to include rate meta in outputs for the current tools/call.
+// Use non-const initializer to avoid raising MSRV; silence clippy on newer compilers.
+#[allow(clippy::missing_const_for_thread_local)]
 thread_local! {
     // Use const initializer to satisfy clippy::missing_const_for_thread_local (Rust 1.90).
     static INCLUDE_RATE: Cell<bool> = const { Cell::new(false) };
@@ -9,7 +11,29 @@ thread_local! {
 
 // Set the include-rate flag for the current thread (one tools/call invocation).
 pub fn set_include_rate(flag: bool) {
+    // Retained for compatibility; prefer IncludeRateGuard for scoped changes.
     INCLUDE_RATE.with(|c| c.set(flag));
+}
+
+// RAII guard to scope INCLUDE_RATE to a call.
+// Restores the previous value when dropped, preventing leakage on early returns.
+pub struct IncludeRateGuard(bool);
+
+impl IncludeRateGuard {
+    pub fn set(flag: bool) -> Self {
+        let prev = INCLUDE_RATE.with(|c| {
+            let p = c.get();
+            c.set(flag);
+            p
+        });
+        Self(prev)
+    }
+}
+
+impl Drop for IncludeRateGuard {
+    fn drop(&mut self) {
+        INCLUDE_RATE.with(|c| c.set(self.0));
+    }
 }
 
 fn current_include_rate() -> bool {

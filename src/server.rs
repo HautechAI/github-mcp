@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::config::Config;
 use crate::http;
-use crate::mcp::{mcp_wrap, set_include_rate};
+use crate::mcp::{mcp_wrap, IncludeRateGuard};
 use crate::tools::*;
 
 // Minimal diagnostics helper: writes to stderr and optionally to a file if MCP_DIAG_LOG is set.
@@ -244,47 +244,54 @@ fn handle_tools_call(id: Option<Id>, params: Value) -> Response {
         return rpc_error(id, -32602, "Invalid params", None);
     };
     // Read reserved top-level flag for output shaping.
+    // Note: thread-local scoping is OK for current sync runtime; if moving to async with thread-hopping,
+    // consider task-local or explicit parameter plumbing.
     let include_rate = call
         .arguments
         .get("_include_rate")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    set_include_rate(include_rate);
+    // Strip the reserved flag before passing arguments to handlers to avoid leaking unknown fields.
+    let mut args = call.arguments.clone();
+    if let Some(obj) = args.as_object_mut() {
+        obj.remove("_include_rate");
+    }
+    let _guard = IncludeRateGuard::set(include_rate);
     match call.name.as_str() {
         "ping" => {
             if !is_ping_enabled() {
                 return rpc_error(id, -32601, "Tool not found: ping (disabled)", None);
             }
-            handle_ping(id, call.arguments)
+            handle_ping(id, args)
         }
-        "list_issues" => handle_list_issues(id, call.arguments),
-        "get_issue" => handle_get_issue(id, call.arguments),
-        "list_issue_comments_plain" => handle_list_issue_comments(id, call.arguments),
-        "list_pull_requests" => handle_list_pull_requests(id, call.arguments),
-        "get_pull_request" => handle_get_pull_request(id, call.arguments),
-        "get_pr_status_summary" => handle_get_pr_status_summary(id, call.arguments),
-        "list_pr_comments_plain" => handle_list_pr_comments(id, call.arguments),
-        "list_pr_review_comments_plain" => handle_list_pr_review_comments(id, call.arguments),
-        "list_pr_review_threads_light" => handle_list_pr_review_threads(id, call.arguments),
-        "resolve_pr_review_thread" => handle_resolve_pr_review_thread(id, call.arguments),
-        "unresolve_pr_review_thread" => handle_unresolve_pr_review_thread(id, call.arguments),
-        "list_pr_reviews_light" => handle_list_pr_reviews(id, call.arguments),
-        "list_pr_commits_light" => handle_list_pr_commits(id, call.arguments),
-        "list_pr_files_light" => handle_list_pr_files(id, call.arguments),
-        "get_pr_diff" => handle_get_pr_text(id, call.arguments, true),
-        "get_pr_patch" => handle_get_pr_text(id, call.arguments, false),
-        "list_workflows_light" => handle_list_workflows(id, call.arguments),
-        "list_workflow_runs_light" => handle_list_workflow_runs(id, call.arguments),
-        "get_workflow_run_light" => handle_get_workflow_run(id, call.arguments),
-        "list_workflow_jobs_light" => handle_list_workflow_jobs(id, call.arguments),
-        "get_workflow_job_logs" => handle_get_workflow_job_logs(id, call.arguments),
-        "rerun_workflow_run" => handle_rerun_workflow_run(id, call.arguments),
-        "rerun_workflow_run_failed" => handle_rerun_workflow_run_failed(id, call.arguments),
-        "cancel_workflow_run" => handle_cancel_workflow_run(id, call.arguments),
-        "list_repo_secrets_light" => handle_list_repo_secrets(id, call.arguments),
-        "list_repo_variables_light" => handle_list_repo_variables(id, call.arguments),
-        "list_environments_light" => handle_list_environments(id, call.arguments),
-        "list_environment_variables_light" => handle_list_environment_variables(id, call.arguments),
+        "list_issues" => handle_list_issues(id, args),
+        "get_issue" => handle_get_issue(id, args),
+        "list_issue_comments_plain" => handle_list_issue_comments(id, args),
+        "list_pull_requests" => handle_list_pull_requests(id, args),
+        "get_pull_request" => handle_get_pull_request(id, args),
+        "get_pr_status_summary" => handle_get_pr_status_summary(id, args),
+        "list_pr_comments_plain" => handle_list_pr_comments(id, args),
+        "list_pr_review_comments_plain" => handle_list_pr_review_comments(id, args),
+        "list_pr_review_threads_light" => handle_list_pr_review_threads(id, args),
+        "resolve_pr_review_thread" => handle_resolve_pr_review_thread(id, args),
+        "unresolve_pr_review_thread" => handle_unresolve_pr_review_thread(id, args),
+        "list_pr_reviews_light" => handle_list_pr_reviews(id, args),
+        "list_pr_commits_light" => handle_list_pr_commits(id, args),
+        "list_pr_files_light" => handle_list_pr_files(id, args),
+        "get_pr_diff" => handle_get_pr_text(id, args, true),
+        "get_pr_patch" => handle_get_pr_text(id, args, false),
+        "list_workflows_light" => handle_list_workflows(id, args),
+        "list_workflow_runs_light" => handle_list_workflow_runs(id, args),
+        "get_workflow_run_light" => handle_get_workflow_run(id, args),
+        "list_workflow_jobs_light" => handle_list_workflow_jobs(id, args),
+        "get_workflow_job_logs" => handle_get_workflow_job_logs(id, args),
+        "rerun_workflow_run" => handle_rerun_workflow_run(id, args),
+        "rerun_workflow_run_failed" => handle_rerun_workflow_run_failed(id, args),
+        "cancel_workflow_run" => handle_cancel_workflow_run(id, args),
+        "list_repo_secrets_light" => handle_list_repo_secrets(id, args),
+        "list_repo_variables_light" => handle_list_repo_variables(id, args),
+        "list_environments_light" => handle_list_environments(id, args),
+        "list_environment_variables_light" => handle_list_environment_variables(id, args),
         _ => rpc_error(id, -32601, &format!("Tool not found: {}", call.name), None),
     }
 }
