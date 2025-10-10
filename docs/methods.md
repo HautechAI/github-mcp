@@ -435,41 +435,35 @@ Outputs
 
 API
 - GraphQL only
-- Query
+- Query (conditional field selection)
+
+When include_location=false (default), minimal fields only:
 
 ```graphql
-query ListPrReviewComments(
-  $owner: String!, $repo: String!, $number: Int!,
-  $first: Int = 30, $after: String
-) {
+query ListPrReviewComments($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      reviewComments(first: $first, after: $after) {
+        nodes { id body createdAt updatedAt author { login } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}
+```
+
+When include_location=true, include location/commit/thread fields:
+
+```graphql
+query ListPrReviewComments($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
       reviewComments(first: $first, after: $after) {
         nodes {
-          id
-          body
-          createdAt
-          updatedAt
-          author { login }
-          # Location from PullRequestReviewComment
-          path
-          diffHunk
-          line
-          startLine
-          side
-          startSide
-          originalLine
-          originalStartLine
-          commit { oid }
-          originalCommit { oid }
-          # Thread location from PullRequestReviewThread (current PR mapping)
-          pullRequestReviewThread {
-            path
-            line
-            startLine
-            side
-            startSide
-          }
+          id body createdAt updatedAt author { login }
+          path diffHunk line startLine side startSide originalLine originalStartLine
+          commit { oid } originalCommit { oid }
+          pullRequestReviewThread { path line startLine side startSide }
         }
         pageInfo { hasNextPage endCursor }
       }
@@ -478,7 +472,6 @@ query ListPrReviewComments(
 }
 ```
 
-- Notes: Location fields are populated from PullRequestReviewComment and PullRequestReviewThread location fields. Thread-level grouping could be provided by a future `list_pr_review_threads_light` if needed.
 - Notes: Location fields are populated from PullRequestReviewComment and PullRequestReviewThread location fields. For thread-level grouping and resolution state, use [list_pr_review_threads_light](#tool-list_pr_review_threads_light).
 
 ## Tool: list_pr_review_threads_light
@@ -515,27 +508,33 @@ Outputs
 
 API
 - GraphQL only
-- Query
+- Query (conditional field selection)
+
+When include_location=false (default), minimal fields only:
 
 ```graphql
-query ListPrReviewThreads(
-  $owner: String!, $repo: String!, $number: Int!,
-  $first: Int = 30, $after: String
-) {
+query ListPrReviewThreads($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      reviewThreads(first: $first, after: $after) {
+        nodes { id isResolved isOutdated comments { totalCount } resolvedBy { login } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}
+```
+
+When include_location=true, include location fields:
+
+```graphql
+query ListPrReviewThreads($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
       reviewThreads(first: $first, after: $after) {
         nodes {
-          id
-          isResolved
-          isOutdated
-          comments { totalCount }
-          resolvedBy { login }
-          path
-          line
-          startLine
-          side
-          startSide
+          id isResolved isOutdated comments { totalCount } resolvedBy { login }
+          path line startLine side startSide
         }
         pageInfo { hasNextPage endCursor }
       }

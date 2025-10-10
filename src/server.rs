@@ -1956,7 +1956,10 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
         let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
-        let query = r#"
+        // Conditionally request location-related fields to minimize payloads by default
+        let include_loc = input.include_location.unwrap_or(false);
+        let query = if include_loc {
+            r#"
         query ListPrReviewComments($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
           repository(owner: $owner, name: $repo) {
             pullRequest(number: $number) {
@@ -1973,7 +1976,22 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
           }
           rateLimit { remaining used resetAt }
         }
-        "#;
+        "#
+        } else {
+            r#"
+        query ListPrReviewComments($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
+          repository(owner: $owner, name: $repo) {
+            pullRequest(number: $number) {
+              reviewComments(first: $first, after: $after) {
+                nodes { id body createdAt updatedAt author { login } }
+                pageInfo { hasNextPage endCursor }
+              }
+            }
+          }
+          rateLimit { remaining used resetAt }
+        }
+        "#
+        };
         #[derive(Deserialize)] struct Author { login: String }
         #[derive(Deserialize)] struct Commit { oid: String }
         #[derive(Deserialize)] struct Node { id: String, body: String, createdAt: String, updatedAt: String, author: Option<Author>, path: Option<String>, diffHunk: Option<String>, line: Option<i64>, startLine: Option<i64>, side: Option<String>, startSide: Option<String>, originalLine: Option<i64>, originalStartLine: Option<i64>, commit: Option<Commit>, originalCommit: Option<Commit>, pullRequestReviewThread: Option<ThreadLoc> }
@@ -2045,7 +2063,10 @@ fn handle_list_pr_review_threads(id: Option<Id>, params: Value) -> Response {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
         let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
-        let query = r#"
+        // Conditionally request location-related fields to minimize payloads by default
+        let include_loc = input.include_location.unwrap_or(false);
+        let query = if include_loc {
+            r#"
         query ListPrReviewThreads($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
           repository(owner: $owner, name: $repo) {
             pullRequest(number: $number) {
@@ -2060,7 +2081,22 @@ fn handle_list_pr_review_threads(id: Option<Id>, params: Value) -> Response {
           }
           rateLimit { remaining used resetAt }
         }
-        "#;
+        "#
+        } else {
+            r#"
+        query ListPrReviewThreads($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
+          repository(owner: $owner, name: $repo) {
+            pullRequest(number: $number) {
+              reviewThreads(first: $first, after: $after) {
+                nodes { id isResolved isOutdated comments { totalCount } resolvedBy { login } }
+                pageInfo { hasNextPage endCursor }
+              }
+            }
+          }
+          rateLimit { remaining used resetAt }
+        }
+        "#
+        };
         #[derive(Deserialize)] struct Author { login: String }
         #[derive(Deserialize)] struct Node { id: String, isResolved: bool, isOutdated: bool, comments: Count, resolvedBy: Option<Author>, path: Option<String>, line: Option<i64>, startLine: Option<i64>, side: Option<String>, startSide: Option<String> }
         #[derive(Deserialize)] struct Count { totalCount: i64 }
