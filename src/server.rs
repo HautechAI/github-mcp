@@ -535,6 +535,7 @@ fn handle_list_workflows(id: Option<Id>, params: Value) -> Response {
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: page + 1,
                 per_page,
+                path: None,
             }))
         } else {
             None
@@ -652,6 +653,7 @@ fn handle_list_workflow_runs(id: Option<Id>, params: Value) -> Response {
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: page + 1,
                 per_page,
+                path: None,
             }))
         } else {
             None
@@ -874,6 +876,7 @@ fn handle_list_workflow_jobs(id: Option<Id>, params: Value) -> Response {
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: page + 1,
                 per_page,
+                path: None,
             }))
         } else {
             None
@@ -1429,6 +1432,7 @@ fn handle_list_repo_secrets(id: Option<Id>, params: Value) -> Response {
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: page + 1,
                 per_page,
+                path: None,
             }))
         } else {
             None
@@ -1540,6 +1544,7 @@ fn handle_list_repo_variables(id: Option<Id>, params: Value) -> Response {
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: page + 1,
                 per_page,
+                path: None,
             }))
         } else {
             None
@@ -1644,6 +1649,7 @@ fn handle_list_environments(id: Option<Id>, params: Value) -> Response {
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: page + 1,
                 per_page,
+                path: None,
             }))
         } else {
             None
@@ -1757,6 +1763,7 @@ fn handle_list_environment_variables(id: Option<Id>, params: Value) -> Response 
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: page + 1,
                 per_page,
+                path: None,
             }))
         } else {
             None
@@ -1969,63 +1976,167 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
     };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (items, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
-        let query = r#"
-        query ListPrReviewComments($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
-          repository(owner: $owner, name: $repo) {
-            pullRequest(number: $number) {
-              reviewComments(first: $first, after: $after) {
-                nodes {
-                  id body createdAt updatedAt author { login }
-                  path diffHunk line startLine side startSide originalLine originalStartLine
-                  commit { oid } originalCommit { oid }
-                  pullRequestReviewThread { path line startLine diffSide startDiffSide }
-                }
-                pageInfo { hasNextPage endCursor }
-              }
+        // Build REST client
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
             }
-          }
-          rateLimit { remaining used resetAt }
+        };
+        // Decode opaque cursor if present; otherwise start at page=1 with per_page=limit
+        let decoded_cursor = input
+            .cursor
+            .as_ref()
+            .and_then(|s| http::decode_rest_cursor(s));
+        let (page, per_page) = if let Some(c) = decoded_cursor.clone() {
+            (c.page, c.per_page)
+        } else {
+            (1u32, limit)
+        };
+        // Temporary debug to stderr to diagnose pagination issue in tests
+        if std::env::var("GITHUB_MCP_DEBUG").ok().as_deref() == Some("1") {
+            eprintln!(
+                "[debug] list_pr_review_comments: raw_cursor={:?} decoded={:?} -> page={} per_page={}",
+                input.cursor, decoded_cursor, page, per_page
+            );
         }
-        "#;
-        #[derive(Deserialize)] struct Author { login: String }
-        #[derive(Deserialize)] struct Commit { oid: String }
-        #[derive(Deserialize)] struct Node { id: String, body: String, createdAt: String, updatedAt: String, author: Option<Author>, path: Option<String>, diffHunk: Option<String>, line: Option<i64>, startLine: Option<i64>, side: Option<String>, startSide: Option<String>, originalLine: Option<i64>, originalStartLine: Option<i64>, commit: Option<Commit>, originalCommit: Option<Commit>, pullRequestReviewThread: Option<ThreadLoc> }
-        #[derive(Deserialize)] struct ThreadLoc { path: Option<String>, line: Option<i64>, startLine: Option<i64>, diffSide: Option<String>, startDiffSide: Option<String> }
-        #[derive(Deserialize)] struct PageInfo { hasNextPage: bool, endCursor: Option<String> }
-        #[derive(Deserialize)] struct RC { nodes: Vec<Node>, pageInfo: PageInfo }
-        #[derive(Deserialize)] struct PR { reviewComments: RC }
-        #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
-        #[derive(Deserialize)] struct Data { repository: Option<Repo> }
-        let vars = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number, "first": limit as i64, "after": input.cursor });
-        let (data, gql_meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
-        if let Some(e) = err { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
-        let pr = match data.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
+        // REST: GET /repos/{owner}/{repo}/pulls/{number}/comments
+        // Prefer the exact next path from Link header if our cursor encodes it, otherwise build from owner/repo/number
+        let path = if let Some(dc) = decoded_cursor.as_ref().and_then(|c| c.path.clone()) {
+            dc
+        } else {
+            format!(
+                "/repos/{}/{}/pulls/{}/comments?per_page={}&page={}",
+                input.owner, input.repo, input.number, per_page, page
+            )
+        };
+        #[derive(Deserialize)]
+        struct RestUser {
+            login: String,
+        }
+        #[derive(Deserialize)]
+        struct RestReviewComment {
+            id: Option<i64>,
+            node_id: Option<String>,
+            body: String,
+            user: Option<RestUser>,
+            created_at: String,
+            updated_at: String,
+            // Location fields
+            path: Option<String>,
+            line: Option<i64>,
+            start_line: Option<i64>,
+            side: Option<String>,
+            start_side: Option<String>,
+            original_line: Option<i64>,
+            original_start_line: Option<i64>,
+            diff_hunk: Option<String>,
+            commit_id: Option<String>,
+            original_commit_id: Option<String>,
+        }
+        let resp = http::rest_get_json::<Vec<RestReviewComment>>(&client, &cfg, &path).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let rate = resp.meta.rate;
         let include_author = input.include_author.unwrap_or(false);
         let include_loc = input.include_location.unwrap_or(false);
-        let items: Vec<ReviewCommentItem> = pr.reviewComments.nodes.into_iter().map(|n| {
-            let t = n.pullRequestReviewThread.as_ref();
-            ReviewCommentItem{
-                id: n.id,
-                body: n.body,
-                created_at: n.createdAt,
-                updated_at: n.updatedAt,
-                author_login: if include_author { n.author.map(|a| a.login) } else { None },
-                path: if include_loc { n.path.or_else(|| t.and_then(|tr| tr.path.clone())) } else { None },
-                line: if include_loc { n.line.or_else(|| t.and_then(|tr| tr.line)) } else { None },
-                start_line: if include_loc { n.startLine.or_else(|| t.and_then(|tr| tr.startLine)) } else { None },
-                // Prefer comment-level side/startSide; fallback to thread-level diffSide/startDiffSide
-                side: if include_loc { map_side(n.side.or_else(|| t.and_then(|tr| tr.diffSide.clone()))) } else { None },
-                start_side: if include_loc { map_side(n.startSide.or_else(|| t.and_then(|tr| tr.startDiffSide.clone()))) } else { None },
-                original_line: if include_loc { n.originalLine } else { None },
-                original_start_line: if include_loc { n.originalStartLine } else { None },
-                diff_hunk: if include_loc { n.diffHunk } else { None },
-                commit_sha: if include_loc { n.commit.map(|c| c.oid) } else { None },
-                original_commit_sha: if include_loc { n.originalCommit.map(|c| c.oid) } else { None },
-            }
-        }).collect();
-        let meta = Meta { next_cursor: pr.reviewComments.pageInfo.endCursor, has_more: pr.reviewComments.pageInfo.hasNextPage, rate: gql_meta.rate };
-        (Some(items), meta, None)
+        let items = resp.value.map(|arr| {
+            arr.into_iter()
+                .map(|n| {
+                    let id = n
+                        .node_id
+                        .clone()
+                        .unwrap_or_else(|| n.id.map(|i| i.to_string()).unwrap_or_default());
+                    ReviewCommentItem {
+                        id,
+                        body: n.body,
+                        created_at: n.created_at,
+                        updated_at: n.updated_at,
+                        author_login: if include_author {
+                            n.user.map(|u| u.login)
+                        } else {
+                            None
+                        },
+                        path: if include_loc { n.path } else { None },
+                        line: if include_loc { n.line } else { None },
+                        start_line: if include_loc { n.start_line } else { None },
+                        side: if include_loc { map_side(n.side) } else { None },
+                        start_side: if include_loc {
+                            map_side(n.start_side)
+                        } else {
+                            None
+                        },
+                        original_line: if include_loc { n.original_line } else { None },
+                        original_start_line: if include_loc {
+                            n.original_start_line
+                        } else {
+                            None
+                        },
+                        diff_hunk: if include_loc { n.diff_hunk } else { None },
+                        commit_sha: if include_loc { n.commit_id } else { None },
+                        original_commit_sha: if include_loc {
+                            n.original_commit_id
+                        } else {
+                            None
+                        },
+                    }
+                })
+                .collect::<Vec<ReviewCommentItem>>()
+        });
+        // Pagination via Link header
+        let has_more = resp
+            .headers
+            .as_ref()
+            .map(http::has_next_page_from_link)
+            .unwrap_or(false);
+        let next_cursor = if has_more {
+            // Try to carry the exact next relative path from the Link header to avoid path-only matching issues in tests
+            let next_path = resp
+                .headers
+                .as_ref()
+                .and_then(http::extract_next_path_from_link);
+            Some(http::encode_rest_cursor(http::RestCursor {
+                page: page + 1,
+                per_page,
+                path: next_path,
+            }))
+        } else {
+            None
+        };
+        (
+            items,
+            Meta {
+                next_cursor,
+                has_more,
+                rate,
+            },
+            None,
+        )
     });
     let out = ListPrReviewCommentsOutput {
         items,
@@ -2033,6 +2144,7 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
         error: err,
     };
     let structured = serde_json::to_value(&out).unwrap();
+    // Simple text summary; keep stable
     let text = structured
         .get("items")
         .and_then(|v| v.as_array())

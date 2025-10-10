@@ -411,7 +411,7 @@ Inputs
 | owner | string | yes |  |  |  |
 | repo | string | yes |  |  |  |
 | number | int | yes |  |  | PR number |
-| cursor | string | no |  |  | GraphQL cursor |
+| cursor | string | no |  |  | Opaque cursor for REST pagination |
 | limit | int | no | 30 |  | max 100 |
 | include_author | bool | no | false |  | adds author_login when true |
 | include_location | bool | no | false |  | when true, includes file/line mapping |
@@ -439,52 +439,11 @@ Outputs
 | error | object | optional | see Error shape |
 
 API
-- GraphQL only
-- Query
-
-```graphql
-query ListPrReviewComments(
-  $owner: String!, $repo: String!, $number: Int!,
-  $first: Int = 30, $after: String
-) {
-  repository(owner: $owner, name: $repo) {
-    pullRequest(number: $number) {
-      reviewComments(first: $first, after: $after) {
-        nodes {
-          id
-          body
-          createdAt
-          updatedAt
-          author { login }
-          # Location from PullRequestReviewComment
-          path
-          diffHunk
-          line
-          startLine
-          side
-          startSide
-          originalLine
-          originalStartLine
-          commit { oid }
-          originalCommit { oid }
-          # Thread location from PullRequestReviewThread (current PR mapping)
-          pullRequestReviewThread {
-            path
-            line
-            startLine
-            side
-            startSide
-          }
-        }
-        pageInfo { hasNextPage endCursor }
-      }
-    }
-  }
-}
-```
-
-- Notes: Location fields are populated from PullRequestReviewComment and PullRequestReviewThread location fields. Thread-level grouping could be provided by a future `list_pr_review_threads_light` if needed.
-- Notes: Location fields are populated from PullRequestReviewComment and PullRequestReviewThread location fields. For thread-level grouping and resolution state, use [list_pr_review_threads_light](#tool-list_pr_review_threads_light).
+- REST only
+- Method: GET
+- Path: /repos/{owner}/{repo}/pulls/{number}/comments?per_page=&page
+- Accept: application/vnd.github+json
+- Notes: Link-based pagination; server returns opaque cursor via meta.next_cursor. When include_author=true, maps user.login to author_login. When include_location=true, maps REST fields path/line/start_line/side/start_side/original_line/original_start_line/diff_hunk/commit_id/original_commit_id to public fields; side values normalized to uppercase.
 
 ## Tool: list_pr_review_threads_light
 Implementation note: GitHub GraphQL exposes thread location sides as diffSide/startDiffSide; server maps these to public side/start_side without changing the interface.
