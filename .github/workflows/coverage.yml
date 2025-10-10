@@ -33,10 +33,12 @@ jobs:
 
       - name: Generate coverage (lcov + json)
         run: |
-          cargo llvm-cov nextest \
-            --workspace \
-            --lcov --output-path lcov.info \
-            --json --output-path coverage.json
+          # Run tests once without generating a report
+          cargo llvm-cov nextest --workspace --no-report
+          # Emit JSON report without rerunning tests
+          cargo llvm-cov report --workspace --json --output-path coverage.json
+          # Emit LCOV report without rerunning tests
+          cargo llvm-cov report --workspace --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
         if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork }}
