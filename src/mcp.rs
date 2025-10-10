@@ -2,10 +2,8 @@ use serde_json::Value;
 use std::cell::Cell;
 
 // Thread-local flag indicating whether to include rate meta in outputs for the current tools/call.
-// Use non-const initializer to avoid raising MSRV; silence clippy on newer compilers.
-#[allow(clippy::missing_const_for_thread_local)]
+// Use a const initializer to satisfy clippy::missing_const_for_thread_local on Rust 1.90 (MSRV).
 thread_local! {
-    // Use const initializer to satisfy clippy::missing_const_for_thread_local (Rust 1.90).
     static INCLUDE_RATE: Cell<bool> = const { Cell::new(false) };
 }
 
