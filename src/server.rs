@@ -2119,7 +2119,7 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
             let next_path = resp
                 .headers
                 .as_ref()
-                .and_then(|h| http::extract_next_path_from_link(h));
+                .and_then(http::extract_next_path_from_link);
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: page + 1,
                 per_page,

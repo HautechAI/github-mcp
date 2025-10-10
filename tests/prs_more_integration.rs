@@ -183,7 +183,7 @@ fn list_pr_review_comments_plain_pagination_and_flags() -> anyhow::Result<()> {
             .path("/repos/o/r/pulls/1/comments")
             .query_param("page", "1");
         then.status(200)
-            .header("link", &format!("<{}/repos/o/r/pulls/1/comments?page=2>; rel=\"next\"", server.base_url()))
+            .header("link", format!("<{}/repos/o/r/pulls/1/comments?page=2>; rel=\"next\"", server.base_url()))
             .json_body(serde_json::json!([
                 {"id": 11, "body": "c1", "created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z","user":{"login":"alice"},"path":"f.rs","line":10,"start_line":9,"side":"right","start_side":"left","original_line":8,"original_start_line":7,"diff_hunk":"@@","commit_id":"abc","original_commit_id":"def"},
                 {"id": 12, "body": "c2", "created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z","user":null}
