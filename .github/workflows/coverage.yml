@@ -36,9 +36,9 @@ jobs:
           # Run tests once without generating a report
           cargo llvm-cov nextest --workspace --no-report
           # Emit JSON report without rerunning tests
-          cargo llvm-cov report --workspace --json --output-path coverage.json
+          cargo llvm-cov report --json --output-path coverage.json
           # Emit LCOV report without rerunning tests
-          cargo llvm-cov report --workspace --lcov --output-path lcov.info
+          cargo llvm-cov report --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
         if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork }}
