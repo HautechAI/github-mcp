@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file by Release P
 ### Bug Fixes
 
 * 78: GraphQL side fields for review comments/threads (no interface changes) ([#79](https://github.com/HautechAI/github-mcp/issues/79)) ([89ddcde](https://github.com/HautechAI/github-mcp/commit/89ddcde10f804fc9b1121a24dd37f8f319ecdf07))
+* tools ([cc970d5](https://github.com/HautechAI/github-mcp/commit/cc970d5c4273823ddb1f71ad754535bcabf5ed89))
 
 ## [0.4.0](https://github.com/HautechAI/github-mcp/compare/v0.3.0...v0.4.0) (2025-10-09)
 
