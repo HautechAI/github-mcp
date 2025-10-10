@@ -179,7 +179,9 @@ fn list_pr_review_comments_plain_pagination_and_flags() -> anyhow::Result<()> {
     let server = MockServer::start();
     // Page 1: two comments, Link header indicates next page
     let _m1 = server.mock(|when, then| {
-        when.method(GET).path("/repos/o/r/pulls/1/comments");
+        when.method(GET)
+            .path("/repos/o/r/pulls/1/comments")
+            .query_param("page", "1");
         then.status(200)
             .header("link", &format!("<{}/repos/o/r/pulls/1/comments?page=2>; rel=\"next\"", server.base_url()))
             .json_body(serde_json::json!([
@@ -213,7 +215,9 @@ fn list_pr_review_comments_plain_pagination_and_flags() -> anyhow::Result<()> {
 
     // Page 2: single comment, no Link header => end
     let _m2 = server.mock(|when, then| {
-        when.method(GET).path("/repos/o/r/pulls/1/comments");
+        when.method(GET)
+            .path("/repos/o/r/pulls/1/comments")
+            .query_param("page", "2");
         then.status(200)
             .json_body(serde_json::json!([
                 {"id": 13, "body": "c3", "created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z"}

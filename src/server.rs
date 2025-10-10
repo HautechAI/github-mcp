@@ -535,6 +535,7 @@ fn handle_list_workflows(id: Option<Id>, params: Value) -> Response {
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: page + 1,
                 per_page,
+                path: None,
             }))
         } else {
             None
@@ -652,6 +653,7 @@ fn handle_list_workflow_runs(id: Option<Id>, params: Value) -> Response {
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: page + 1,
                 per_page,
+                path: None,
             }))
         } else {
             None
@@ -874,6 +876,7 @@ fn handle_list_workflow_jobs(id: Option<Id>, params: Value) -> Response {
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: page + 1,
                 per_page,
+                path: None,
             }))
         } else {
             None
@@ -1429,6 +1432,7 @@ fn handle_list_repo_secrets(id: Option<Id>, params: Value) -> Response {
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: page + 1,
                 per_page,
+                path: None,
             }))
         } else {
             None
@@ -1540,6 +1544,7 @@ fn handle_list_repo_variables(id: Option<Id>, params: Value) -> Response {
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: page + 1,
                 per_page,
+                path: None,
             }))
         } else {
             None
@@ -1644,6 +1649,7 @@ fn handle_list_environments(id: Option<Id>, params: Value) -> Response {
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: page + 1,
                 per_page,
+                path: None,
             }))
         } else {
             None
@@ -1757,6 +1763,7 @@ fn handle_list_environment_variables(id: Option<Id>, params: Value) -> Response 
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: page + 1,
                 per_page,
+                path: None,
             }))
         } else {
             None
@@ -1989,20 +1996,32 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
             }
         };
         // Decode opaque cursor if present; otherwise start at page=1 with per_page=limit
-        let (page, per_page) = if let Some(c) = input
+        let decoded_cursor = input
             .cursor
             .as_ref()
-            .and_then(|s| http::decode_rest_cursor(s))
-        {
+            .and_then(|s| http::decode_rest_cursor(s));
+        let (page, per_page) = if let Some(c) = decoded_cursor.clone() {
             (c.page, c.per_page)
         } else {
             (1u32, limit)
         };
+        // Temporary debug to stderr to diagnose pagination issue in tests
+        if std::env::var("GITHUB_MCP_DEBUG").ok().as_deref() == Some("1") {
+            eprintln!(
+                "[debug] list_pr_review_comments: raw_cursor={:?} decoded={:?} -> page={} per_page={}",
+                input.cursor, decoded_cursor, page, per_page
+            );
+        }
         // REST: GET /repos/{owner}/{repo}/pulls/{number}/comments
-        let path = format!(
-            "/repos/{}/{}/pulls/{}/comments?per_page={}&page={}",
-            input.owner, input.repo, input.number, per_page, page
-        );
+        // Prefer the exact next path from Link header if our cursor encodes it, otherwise build from owner/repo/number
+        let path = if let Some(dc) = decoded_cursor.as_ref().and_then(|c| c.path.clone()) {
+            dc
+        } else {
+            format!(
+                "/repos/{}/{}/pulls/{}/comments?per_page={}&page={}",
+                input.owner, input.repo, input.number, per_page, page
+            )
+        };
         #[derive(Deserialize)]
         struct RestUser {
             login: String,
@@ -2096,9 +2115,15 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
             .map(http::has_next_page_from_link)
             .unwrap_or(false);
         let next_cursor = if has_more {
+            // Try to carry the exact next relative path from the Link header to avoid path-only matching issues in tests
+            let next_path = resp
+                .headers
+                .as_ref()
+                .and_then(|h| http::extract_next_path_from_link(h));
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: page + 1,
                 per_page,
+                path: next_path,
             }))
         } else {
             None
@@ -2119,6 +2144,7 @@ fn handle_list_pr_review_comments(id: Option<Id>, params: Value) -> Response {
         error: err,
     };
     let structured = serde_json::to_value(&out).unwrap();
+    // Simple text summary; keep stable
     let text = structured
         .get("items")
         .and_then(|v| v.as_array())

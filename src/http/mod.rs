@@ -129,6 +129,10 @@ pub async fn rest_get_json<T: for<'de> Deserialize<'de>>(
     path: &str,
 ) -> RestResponse<T> {
     let url = format!("{}{}", cfg.api_url, path);
+    let debug = std::env::var("GITHUB_MCP_DEBUG").ok().as_deref() == Some("1");
+    if debug {
+        eprintln!("[debug] REST GET {}", url);
+    }
     let mut attempt: u32 = 0;
     loop {
         let res = client
@@ -167,6 +171,11 @@ pub async fn rest_get_json<T: for<'de> Deserialize<'de>>(
 
         let status = res.status();
         let headers = res.headers().clone();
+        if debug {
+            if let Some(link) = headers.get("link").and_then(|v| v.to_str().ok()) {
+                eprintln!("[debug] Link: {}", link);
+            }
+        }
         let rate = extract_rate_from_rest(&headers);
         let retry_after = headers
             .get(RETRY_AFTER)
@@ -445,6 +454,9 @@ pub async fn graphql_post<
 pub struct RestCursor {
     pub page: u32,
     pub per_page: u32,
+    // Optional absolute or relative path to use for the next request; if present, prefer it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
 }
 
 pub fn encode_rest_cursor(c: RestCursor) -> String {
@@ -458,6 +470,35 @@ pub fn decode_rest_cursor(s: &str) -> Option<RestCursor> {
     serde_json::from_slice(&bytes).ok()
 }
 
+// Extract the relative path (including query) for rel="next" from a Link header if present.
+// Returns values like "/repos/o/r/pulls/1/comments?page=2".
+pub fn extract_next_path_from_link(headers: &HeaderMap) -> Option<String> {
+    let link = headers.get("link")?.to_str().ok()?;
+    // Find the segment with rel="next"
+    // Example: <https://api.github.com/repos/o/r/pulls/1/comments?page=2>; rel="next", <...>; rel="last"
+    for part in link.split(',') {
+        let trimmed = part.trim();
+        if !trimmed.contains("rel=\"next\"") {
+            continue;
+        }
+        let start = trimmed.find('<')? + 1;
+        let end = trimmed.find('>')?;
+        let url_str = &trimmed[start..end];
+        // Try to parse as absolute URL first; fall back to assuming it's already a path
+        if let Ok(u) = url::Url::parse(url_str) {
+            let mut p = u.path().to_string();
+            if let Some(q) = u.query() {
+                p.push('?');
+                p.push_str(q);
+            }
+            return Some(p);
+        } else {
+            return Some(url_str.to_string());
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -467,6 +508,7 @@ mod tests {
         let c = RestCursor {
             page: 2,
             per_page: 30,
+            path: None,
         };
         let s = encode_rest_cursor(c.clone());
         let d = decode_rest_cursor(&s).unwrap();

@@ -10,6 +10,7 @@ fn rest_cursor_codec_roundtrip() {
     let c = RestCursor {
         page: 3,
         per_page: 50,
+        path: None,
     };
     let enc = encode_rest_cursor(c.clone());
     let dec = decode_rest_cursor(&enc).unwrap();
