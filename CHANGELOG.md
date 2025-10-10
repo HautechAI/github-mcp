@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file by Release Please.
 
+## [0.5.0](https://github.com/HautechAI/github-mcp/compare/v0.4.1...v0.5.0) (2025-10-10)
+
+
+### Features
+
+* list_pr_review_comments_plain via REST with Link pagination; author/location flags; docs/tests update ([96560fc](https://github.com/HautechAI/github-mcp/commit/96560fc751c7c9c0f606f9b061759de657f130cf))
+* list_pr_review_comments_plain via REST with Link-based pagination; include_author/location mapping; docs/tests/e2e updated. Closes [#82](https://github.com/HautechAI/github-mcp/issues/82) ([fa57f7d](https://github.com/HautechAI/github-mcp/commit/fa57f7d24968a683f9d05515e468f253c3f84a24))
+
+
+### Bug Fixes
+
+* fix:  ([39120c5](https://github.com/HautechAI/github-mcp/commit/39120c5edaa2d3499b4a6b67d43cf2e6b5501a2d))
+* clippy cleanups (needless borrow in tests header format!; redundant closure in extract_next_path_from_link) ([5f45adc](https://github.com/HautechAI/github-mcp/commit/5f45adc707c0be29009bbb640d5b3ed75392dd48))
+
 ## [0.4.1](https://github.com/HautechAI/github-mcp/compare/v0.4.0...v0.4.1) (2025-10-10)
 
 
