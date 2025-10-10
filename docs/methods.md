@@ -57,6 +57,11 @@ Common shapes
 | REST | X-RateLimit-Remaining, X-RateLimit-Used, X-RateLimit-Reset |
 | GraphQL | rateLimit { remaining, used, resetAt } |
 
+Output shaping
+- Lean by default: when a result is not paginated (has_more=false), has_more/next_cursor are omitted, and meta is removed entirely if no fields remain.
+- To include rate limit metadata, set a reserved per-call argument `_include_rate: true` at the top level of the tool arguments.
+- With `_include_rate: true`, meta is always present and includes `rate`; pagination keys appear only when `has_more` is true.
+
 ISSUES
 
 ## Tool: list_issues
