@@ -3,7 +3,6 @@ name: Coverage
 on:
   pull_request:
   push:
-    branches: [ main ]
 
 permissions:
   contents: read
@@ -101,6 +100,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
+        if: success()
         with:
           files: lcov.info
           fail_ci_if_error: false
