@@ -1,0 +1,54 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.hautechai/github-mcp",
+  "title": "GitHub MCP Server",
+  "description": "Agent-optimized GitHub MCP server over stdio for repository and issue workflows.",
+  "version": "0.2.0",
+  "websiteUrl": "https://github.com/HautechAI/github-mcp",
+  "repository": {
+    "url": "https://github.com/HautechAI/github-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "registryBaseUrl": "https://github.com",
+      "identifier": "https://github.com/HautechAI/github-mcp/releases/download/v0.2.0/github-mcp-x86_64-unknown-linux-gnu",
+      "version": "0.2.0",
+      "fileSha256": "c63aa07b0feb8fb4ed070f1f8bdfa0236f028458639bf7148508d08f702e3602",
+      "transport": { "type": "stdio" }
+    },
+    {
+      "registryType": "mcpb",
+      "registryBaseUrl": "https://github.com",
+      "identifier": "https://github.com/HautechAI/github-mcp/releases/download/v0.2.0/github-mcp-aarch64-unknown-linux-gnu",
+      "version": "0.2.0",
+      "fileSha256": "989a32c89be656851c728780fd24dbde4af502493a09ce17af2d63d3272bed76",
+      "transport": { "type": "stdio" }
+    },
+    {
+      "registryType": "mcpb",
+      "registryBaseUrl": "https://github.com",
+      "identifier": "https://github.com/HautechAI/github-mcp/releases/download/v0.2.0/github-mcp-x86_64-apple-darwin",
+      "version": "0.2.0",
+      "fileSha256": "b508adca27761bf8887088e9f9ba33a9679d62da5262bcf532be2bfb2a209b98",
+      "transport": { "type": "stdio" }
+    },
+    {
+      "registryType": "mcpb",
+      "registryBaseUrl": "https://github.com",
+      "identifier": "https://github.com/HautechAI/github-mcp/releases/download/v0.2.0/github-mcp-aarch64-apple-darwin",
+      "version": "0.2.0",
+      "fileSha256": "4fb65ed2c8d2916bb99ae1bdd710809e954b927e725a3bc6f4c0749d10293a9e",
+      "transport": { "type": "stdio" }
+    },
+    {
+      "registryType": "mcpb",
+      "registryBaseUrl": "https://github.com",
+      "identifier": "https://github.com/HautechAI/github-mcp/releases/download/v0.2.0/github-mcp-x86_64-pc-windows-msvc.exe",
+      "version": "0.2.0",
+      "fileSha256": "120ccf8c38f377fe637fa662f5aaf6a0ed8c95ba9fd1bd011dbfff3f4c852677",
+      "transport": { "type": "stdio" }
+    }
+  ]
+}
