@@ -58,8 +58,17 @@ fn list_pr_review_threads_light_include_location_and_empty() -> anyhow::Result<(
     let server = MockServer::start();
     // Empty threads response
     let body_empty = serde_json::json!({
-      "data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": [], "pageInfo": {"hasNextPage": false, "endCursor": null}}}},
-      "rateLimit": {"remaining": 4999, "used": 1, "resetAt": "1970-01-01T00:00:00Z"}
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "reviewThreads": {
+                        "nodes": [],
+                        "pageInfo": { "hasNextPage": false, "endCursor": null }
+                    }
+                }
+            }
+        },
+        "rateLimit": { "remaining": 4999, "used": 1, "resetAt": "1970-01-01T00:00:00Z" }
     });
     let _m1 = server.mock(|when, then| {
         when.method(POST).path("/graphql");
@@ -73,7 +82,10 @@ fn list_pr_review_threads_light_include_location_and_empty() -> anyhow::Result<(
         &req1,
         &[
             ("GITHUB_TOKEN", "t"),
-            ("GITHUB_GRAPHQL_URL", &format!("{}/graphql", server.base_url())),
+            (
+                "GITHUB_GRAPHQL_URL",
+                &format!("{}/graphql", server.base_url()),
+            ),
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
@@ -93,7 +105,10 @@ fn list_pr_review_threads_light_include_location_and_empty() -> anyhow::Result<(
         &req2,
         &[
             ("GITHUB_TOKEN", "t"),
-            ("GITHUB_GRAPHQL_URL", &format!("{}/graphql", server.base_url())),
+            (
+                "GITHUB_GRAPHQL_URL",
+                &format!("{}/graphql", server.base_url()),
+            ),
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
@@ -107,8 +122,17 @@ fn list_pr_review_comments_plain_include_location_and_empty() -> anyhow::Result<
     let server = MockServer::start();
     // Empty reviewComments, schema still returns rateLimit
     let body_empty = serde_json::json!({
-      "data": {"repository": {"pullRequest": {"reviewComments": {"nodes": [], "pageInfo": {"hasNextPage": false, "endCursor": null}}}},
-      "rateLimit": {"remaining": 4999, "used": 1, "resetAt": "1970-01-01T00:00:00Z"}
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "reviewComments": {
+                        "nodes": [],
+                        "pageInfo": { "hasNextPage": false, "endCursor": null }
+                    }
+                }
+            }
+        },
+        "rateLimit": { "remaining": 4999, "used": 1, "resetAt": "1970-01-01T00:00:00Z" }
     });
     let _m1 = server.mock(|when, then| {
         when.method(POST).path("/graphql");
@@ -122,7 +146,10 @@ fn list_pr_review_comments_plain_include_location_and_empty() -> anyhow::Result<
         &req1,
         &[
             ("GITHUB_TOKEN", "t"),
-            ("GITHUB_GRAPHQL_URL", &format!("{}/graphql", server.base_url())),
+            (
+                "GITHUB_GRAPHQL_URL",
+                &format!("{}/graphql", server.base_url()),
+            ),
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
@@ -142,7 +169,10 @@ fn list_pr_review_comments_plain_include_location_and_empty() -> anyhow::Result<
         &req2,
         &[
             ("GITHUB_TOKEN", "t"),
-            ("GITHUB_GRAPHQL_URL", &format!("{}/graphql", server.base_url())),
+            (
+                "GITHUB_GRAPHQL_URL",
+                &format!("{}/graphql", server.base_url()),
+            ),
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
