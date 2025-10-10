@@ -1,5 +1,7 @@
 # github-mcp
 
+[![codecov](https://codecov.io/gh/HautechAI/github-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/HautechAI/github-mcp)
+
 GitHub MCP server (Rust, stdio JSON-RPC).
 
 Quickstart:

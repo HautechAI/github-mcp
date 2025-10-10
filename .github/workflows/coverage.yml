@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_TERM_COLOR: always
-      LIVE_API_TESTS: ${{ vars.LIVE_API_TESTS }}
+      LIVE_API_TESTS: '1'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,6 +42,22 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Doppler secrets (optional)
+        if: ${{ !github.event.pull_request.head.repo.fork && secrets.DOPPLER_TOKEN != '' }}
+        uses: dopplerhq/cli-action@v2
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+      - name: Export GITHUB_TOKEN from Doppler
+        if: ${{ !github.event.pull_request.head.repo.fork && secrets.DOPPLER_TOKEN != '' }}
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          set -euo pipefail
+          if command -v doppler >/dev/null 2>&1; then
+            doppler run -p github-mcp -c dev -- bash -ceu 'echo "GITHUB_TOKEN=${GITHUB_TOKEN:-}" >> $GITHUB_ENV'
+          fi
 
       - name: Run tests with coverage (lcov)
         run: |
@@ -82,6 +98,13 @@ jobs:
           path: |
             lcov.info
             coverage.json
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          fail_ci_if_error: false
+          verbose: false
 
       - name: Determine changed files (PR only)
         id: changed
