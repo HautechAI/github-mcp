@@ -1,10 +1,55 @@
 use serde_json::Value;
+use std::cell::Cell;
+
+// Thread-local flag indicating whether to include rate meta in outputs for the current tools/call.
+thread_local! {
+    static INCLUDE_RATE: Cell<bool> = Cell::new(false);
+}
+
+// Set the include-rate flag for the current thread (one tools/call invocation).
+pub fn set_include_rate(flag: bool) {
+    INCLUDE_RATE.with(|c| c.set(flag));
+}
+
+fn current_include_rate() -> bool {
+    INCLUDE_RATE.with(|c| c.get())
+}
+
+// Prune meta fields according to include_rate and has_more.
+// - When has_more is false/missing: drop has_more and next_cursor.
+// - When include_rate is false: drop rate.
+// - Drop meta entirely if it becomes empty.
+fn prune_meta(structured: &mut Value, include_rate: bool) {
+    let Some(obj) = structured.as_object_mut() else { return; };
+    let Some(meta_val) = obj.get_mut("meta") else { return; };
+    let Some(meta_obj) = meta_val.as_object_mut() else { return; };
+
+    let has_more = meta_obj
+        .get("has_more")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    if !has_more {
+        meta_obj.remove("has_more");
+        meta_obj.remove("next_cursor");
+    }
+    if !include_rate {
+        meta_obj.remove("rate");
+    }
+
+    if meta_obj.is_empty() {
+        obj.remove("meta");
+    }
+}
 
 // Build an MCP-compliant result envelope for tools/call outputs.
 // - content: always a single text block so clients can render something.
 // - structuredContent: preserves the previous structured JSON shape to minimize breakage.
 // - isError: included only when true to keep payloads small.
-pub fn mcp_wrap(structured: Value, text_opt: Option<String>, is_error: bool) -> Value {
+pub fn mcp_wrap(mut structured: Value, text_opt: Option<String>, is_error: bool) -> Value {
+    // Apply output shaping immediately before wrapping.
+    let include_rate = current_include_rate();
+    prune_meta(&mut structured, include_rate);
     let text = match text_opt {
         Some(s) => s,
         None => serde_json::to_string(&structured).unwrap_or_else(|_| "{}".to_string()),

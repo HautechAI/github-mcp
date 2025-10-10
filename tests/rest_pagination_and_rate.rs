@@ -48,6 +48,22 @@ fn rest_pagination_link_headers() -> anyhow::Result<()> {
     assert!(out.contains("\"structuredContent\""));
     assert!(out.contains("\"has_more\":true"));
     assert!(out.contains("next_cursor"));
+    // Default should omit rate
+    assert!(!out.contains("\"rate\""));
+
+    // With _include_rate=true: rate should appear in meta
+    let req_inc = serde_json::json!({
+        "jsonrpc":"2.0","method":"tools/call","id":2,
+        "params":{"name":"list_workflow_runs_light","arguments":{"owner":"o","repo":"r","per_page":30,"_include_rate":true}}
+    });
+    let out_inc = run_with_env(
+        &req_inc,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
+    assert!(out_inc.contains("\"rate\""));
     Ok(())
 }
 
@@ -77,7 +93,68 @@ fn graphql_rate_limit_meta() -> anyhow::Result<()> {
             ("GITHUB_API_URL", server.base_url().as_str()),
         ],
     )?;
-    assert!(out.contains("\"rate\""));
-    assert!(out.contains("\"remaining\":4999"));
+    // Default excludes rate and prunes meta entirely for non-paginated results.
+    let v: serde_json::Value = serde_json::from_str(&out)?;
+    let sc = v.get("result").and_then(|r| r.get("structuredContent")).cloned().unwrap_or_default();
+    assert!(sc.get("meta").is_none(), "expected meta omitted by default when has_more=false: {}", sc);
+
+    // When explicitly requested via _include_rate, rate should appear.
+    let req_include = serde_json::json!({
+        "jsonrpc":"2.0","method":"tools/call","id":2,
+        "params":{"name":"get_pull_request","arguments":{"owner":"o","repo":"r","number":1,"_include_rate":true}}
+    });
+    let out2 = run_with_env(
+        &req_include,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            (
+                "GITHUB_GRAPHQL_URL",
+                &format!("{}/graphql", server.base_url()),
+            ),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
+    assert!(out2.contains("\"rate\""));
+    assert!(out2.contains("\"remaining\":4999"));
+    Ok(())
+}
+
+#[test]
+fn rest_non_paginated_meta_default_and_optin() -> anyhow::Result<()> {
+    let server = MockServer::start();
+    // get_workflow_run_light returns non-paginated result
+    let _m = server.mock(|when, then| {
+        when.method(GET).path("/repos/o/r/actions/runs/1");
+        then.status(200)
+            .header("x-ratelimit-remaining","4999")
+            .header("x-ratelimit-used","1")
+            .header("x-ratelimit-reset","0")
+            .json_body(serde_json::json!({
+                "id":1,
+                "run_number":10,
+                "event":"push",
+                "status":"completed",
+                "conclusion":"success",
+                "head_sha":"abc",
+                "created_at":"2025-01-01T00:00:00Z",
+                "updated_at":"2025-01-01T00:00:00Z"
+            }));
+    });
+    let req = serde_json::json!({
+        "jsonrpc":"2.0","method":"tools/call","id":1,
+        "params":{"name":"get_workflow_run_light","arguments":{"owner":"o","repo":"r","run_id":1}}
+    });
+    let out = run_with_env(&req, &[("GITHUB_TOKEN","t"),("GITHUB_API_URL", server.base_url().as_str())])?;
+    let v: serde_json::Value = serde_json::from_str(&out)?;
+    let sc = v.get("result").and_then(|r| r.get("structuredContent")).cloned().unwrap_or_default();
+    assert!(sc.get("meta").is_none(), "expected meta omitted by default when has_more=false");
+
+    // Opt-in rate
+    let req2 = serde_json::json!({
+        "jsonrpc":"2.0","method":"tools/call","id":2,
+        "params":{"name":"get_workflow_run_light","arguments":{"owner":"o","repo":"r","run_id":1,"_include_rate":true}}
+    });
+    let out2 = run_with_env(&req2, &[("GITHUB_TOKEN","t"),("GITHUB_API_URL", server.base_url().as_str())])?;
+    assert!(out2.contains("\"rate\""));
     Ok(())
 }

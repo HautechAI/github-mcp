@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::config::Config;
 use crate::http;
-use crate::mcp::mcp_wrap;
+use crate::mcp::{mcp_wrap, set_include_rate};
 use crate::tools::*;
 
 // Minimal diagnostics helper: writes to stderr and optionally to a file if MCP_DIAG_LOG is set.
@@ -243,6 +243,13 @@ fn handle_tools_call(id: Option<Id>, params: Value) -> Response {
     let Ok(call) = parsed else {
         return rpc_error(id, -32602, "Invalid params", None);
     };
+    // Read reserved top-level flag for output shaping.
+    let include_rate = call
+        .arguments
+        .get("_include_rate")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    set_include_rate(include_rate);
     match call.name.as_str() {
         "ping" => {
             if !is_ping_enabled() {

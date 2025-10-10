@@ -49,6 +49,10 @@ fn list_pr_comments_plain_happy() -> anyhow::Result<()> {
     assert!(out.contains("\"structuredContent\""));
     assert!(out.contains("\"items\""));
     assert!(out.contains("\"author_login\":\"alice\""));
+    // No pagination, so meta should be pruned entirely by default
+    let v: serde_json::Value = serde_json::from_str(&out)?;
+    let sc = v.get("result").and_then(|r| r.get("structuredContent")).cloned().unwrap_or_default();
+    assert!(sc.get("meta").is_none(), "expected meta to be omitted when has_more=false and include_rate not requested: {}", sc);
     Ok(())
 }
 

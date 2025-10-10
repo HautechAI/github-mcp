@@ -168,6 +168,12 @@ Notes
   - GraphQL `rateLimit` is included where feasible without complicating queries; some queries may still omit it.
   - REST pagination relies on Link headers; when GitHub omits Link for small result sets, `has_more` may be false with no `next_cursor`.
 
+Output shaping
+- Default behavior aims for minimal payloads:
+  - When a result is not paginated, pagination fields are hidden and the `meta` object may be omitted entirely.
+  - Rate limit metadata is excluded by default.
+- Opt-in rate metadata per call by adding `_include_rate: true` to the top-level tool arguments. When set, `meta.rate` is included; pagination keys are included only when relevant.
+
 MCP response envelope (breaking change)
 - tools/call results are wrapped:
   - `content`: array with one `{type:"text", text:"..."}` block for human-friendly display.
