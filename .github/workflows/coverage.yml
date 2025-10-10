@@ -1,8 +1,11 @@
 name: Coverage
 
 on:
-  pull_request:
   push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -139,7 +142,7 @@ jobs:
           cat coverage_gaps.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment on PR with coverage gaps
-        if: github.event_name == 'pull_request'
+        if: ${{ github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork }}
         uses: actions/github-script@v7
         with:
           script: |
