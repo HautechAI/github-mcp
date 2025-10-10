@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   coverage:
@@ -39,6 +40,50 @@ jobs:
           cargo llvm-cov report --json --output-path coverage.json
           # Emit LCOV report without rerunning tests
           cargo llvm-cov report --lcov --output-path lcov.info
+
+      # Compute a concise coverage summary without re-running tests
+      - name: Compute coverage summary
+        id: compute_summary
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            try {
+              const raw = fs.readFileSync('coverage.json', 'utf8');
+              const json = JSON.parse(raw);
+              const totals = json?.data?.[0]?.totals || {};
+              const lines = totals.lines || {};
+              const functions = totals.functions || {};
+              const regions = totals.regions || {};
+              const pct = (n) => (typeof n === 'number' ? n.toFixed(2) : 'N/A');
+              const num = (n) => (typeof n === 'number' ? n : 'N/A');
+              const message = [
+                'Coverage summary',
+                `- Lines: ${pct(lines.percent)}% (${num(lines.covered)}/${num(lines.count)})`,
+                `- Functions: ${pct(functions.percent)}% (${num(functions.covered)}/${num(functions.count)})`,
+                `- Regions: ${pct(regions.percent)}% (${num(regions.covered)}/${num(regions.count)})`
+              ].join('\n');
+
+              core.setOutput('message', message);
+              await core.summary.addHeading('Coverage summary').addList([
+                `Lines: ${pct(lines.percent)}% (${num(lines.covered)}/${num(lines.count)})`,
+                `Functions: ${pct(functions.percent)}% (${num(functions.covered)}/${num(functions.count)})`,
+                `Regions: ${pct(regions.percent)}% (${num(regions.covered)}/${num(regions.count)})`
+              ]).write();
+            } catch (err) {
+              core.warning(`Failed to compute coverage summary: ${err.message}`);
+              core.setOutput('message', 'Coverage summary not available');
+            }
+
+      # Post or update a sticky PR comment with coverage summary
+      - name: Post PR coverage comment (sticky)
+        if: ${{ github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork }}
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: Coverage report
+          message: ${{ steps.compute_summary.outputs.message }}
 
       - name: Upload coverage to Codecov
         if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork }}
