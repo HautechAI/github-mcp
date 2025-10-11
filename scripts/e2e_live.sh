@@ -4,7 +4,7 @@ set -euo pipefail
 # Live E2E harness for github-mcp using a single persistent stdio JSON-RPC session.
 # - Validates MCP envelopes and key fields for each tool against a seeded repo.
 # - Read-mostly by default; mutation tools gated by E2E_ENABLE_MUTATIONS=true.
-# - Skips gracefully when fixtures are absent.
+# - Enforces Doppler context and GitHub token; fails fast when missing.
 #
 # Usage:
 #   bash ./scripts/e2e_live.sh
@@ -38,6 +38,19 @@ require_file() {
 
 require_tools() {
   command -v node >/dev/null 2>&1 || { echo "[e2e][fatal] node is required" | tee -a "$LOG" >&2; exit 1; }
+}
+
+require_auth() {
+  # Enforce presence of Doppler environment context and GitHub token.
+  if ! env | grep -qE '^DOPPLER_(PROJECT|CONFIG|ENVIRONMENT)='; then
+    echo "[e2e][fatal] Missing Doppler context. Run via: doppler run -p github-mcp -c dev -- bash ./scripts/e2e_live.sh" | tee -a "$LOG" >&2
+    exit 1
+  fi
+  if [ -z "${GITHUB_TOKEN:-}" ] && [ -z "${GH_TOKEN:-}" ]; then
+    echo "[e2e][fatal] Missing GITHUB_TOKEN/GH_TOKEN in environment (expected via Doppler)." | tee -a "$LOG" >&2
+    echo "[e2e][hint] Example: doppler run -p github-mcp -c dev -- bash ./scripts/e2e_live.sh" | tee -a "$LOG" >&2
+    exit 1
+  fi
 }
 
 # Persistent session via Node helper (single stdio JSON-RPC session)
@@ -165,6 +178,7 @@ NODE
 # Prepare
 require_file
 require_tools
+require_auth
 
 session_start
 

@@ -21,32 +21,37 @@ fn env_var(key: &str) -> Option<String> {
     std::env::var(key).ok().filter(|s| !s.is_empty())
 }
 
-fn should_run_live() -> bool {
-    matches!(env_var("LIVE_API_TESTS").as_deref(), Some("1"))
-        && (env_var("GITHUB_TOKEN").is_some() || env_var("GH_TOKEN").is_some())
+fn ensure_prereqs(base_msg: &str) {
+    // Enforce Doppler context by checking common env markers.
+    let in_doppler = ["DOPPLER_PROJECT", "DOPPLER_CONFIG", "DOPPLER_ENVIRONMENT"]
+        .into_iter()
+        .any(|k| env_var(k).is_some());
+    if !in_doppler {
+        panic!(
+            "{} Missing Doppler context. Run via: doppler run -p github-mcp -c dev -- env E2E_OWNER=... E2E_REPO=... E2E_ISSUE_NUM=... cargo test -- --ignored",
+            base_msg
+        );
+    }
+
+    // Require GitHub token in environment.
+    if env_var("GITHUB_TOKEN").is_none() && env_var("GH_TOKEN").is_none() {
+        panic!(
+            "{} Missing GITHUB_TOKEN/GH_TOKEN. Use Doppler or export a token before running ignored live tests.",
+            base_msg
+        );
+    }
 }
 
 #[ignore]
 #[test]
 fn live_list_issues_basic() -> anyhow::Result<()> {
-    if !should_run_live() {
-        eprintln!("skipping live test: LIVE_API_TESTS!=1 or token missing");
-        return Ok(());
-    }
-    let owner = match env_var("E2E_OWNER") {
-        Some(v) => v,
-        None => {
-            eprintln!("skipping: E2E_OWNER not set");
-            return Ok(());
-        }
-    };
-    let repo = match env_var("E2E_REPO") {
-        Some(v) => v,
-        None => {
-            eprintln!("skipping: E2E_REPO not set");
-            return Ok(());
-        }
-    };
+    ensure_prereqs("[live_list_issues_basic]");
+    let owner = env_var("E2E_OWNER").unwrap_or_else(|| panic!(
+        "[live_list_issues_basic] E2E_OWNER is required. Example: doppler run -p github-mcp -c dev -- env E2E_OWNER=HautechAI E2E_REPO=github-mcp-test-repo cargo test -- --ignored"
+    ));
+    let repo = env_var("E2E_REPO").unwrap_or_else(|| panic!(
+        "[live_list_issues_basic] E2E_REPO is required. Example: doppler run -p github-mcp -c dev -- env E2E_OWNER=HautechAI E2E_REPO=github-mcp-test-repo cargo test -- --ignored"
+    ));
 
     let req = serde_json::json!({
         "jsonrpc":"2.0",
@@ -63,22 +68,18 @@ fn live_list_issues_basic() -> anyhow::Result<()> {
 #[ignore]
 #[test]
 fn live_get_issue_if_fixture_provided() -> anyhow::Result<()> {
-    if !should_run_live() {
-        eprintln!("skipping live test: LIVE_API_TESTS!=1 or token missing");
-        return Ok(());
-    }
-    let owner = match env_var("E2E_OWNER") {
-        Some(v) => v,
-        None => return Ok(()),
-    };
-    let repo = match env_var("E2E_REPO") {
-        Some(v) => v,
-        None => return Ok(()),
-    };
-    let number = match env_var("E2E_ISSUE_NUM").and_then(|s| s.parse::<u64>().ok()) {
-        Some(n) => n,
-        None => return Ok(()),
-    };
+    ensure_prereqs("[live_get_issue_if_fixture_provided]");
+    let owner = env_var("E2E_OWNER").unwrap_or_else(|| panic!(
+        "[live_get_issue_if_fixture_provided] E2E_OWNER is required."
+    ));
+    let repo = env_var("E2E_REPO").unwrap_or_else(|| panic!(
+        "[live_get_issue_if_fixture_provided] E2E_REPO is required."
+    ));
+    let number = env_var("E2E_ISSUE_NUM")
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or_else(|| panic!(
+            "[live_get_issue_if_fixture_provided] E2E_ISSUE_NUM must be set to a valid number."
+        ));
 
     let req = serde_json::json!({
         "jsonrpc":"2.0",
@@ -91,4 +92,3 @@ fn live_get_issue_if_fixture_provided() -> anyhow::Result<()> {
     assert!(out.contains("\"item\""));
     Ok(())
 }
-

@@ -123,6 +123,17 @@ jobs:
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 
+      - name: Live tests (ignored, via Doppler)
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          E2E_OWNER: HautechAI
+          E2E_REPO: github-mcp-test-repo
+          E2E_ISSUE_NUM: '10'
+        run: |
+          set -euxo pipefail
+          # Run ignored live tests under Doppler with required fixtures
+          doppler run -p github-mcp -c dev -- env E2E_OWNER="$E2E_OWNER" E2E_REPO="$E2E_REPO" E2E_ISSUE_NUM="$E2E_ISSUE_NUM" cargo test -- --ignored
+
       - name: Run E2E (read-only)
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
@@ -185,6 +196,8 @@ jobs:
           E2E_ENABLE_MUTATIONS: 'true'
         run: |
           set -euxo pipefail
+          # Also run ignored live tests under Doppler to ensure parity
+          doppler run -p github-mcp -c dev -- env E2E_OWNER="$E2E_OWNER" E2E_REPO="$E2E_REPO" E2E_ISSUE_NUM="$E2E_ISSUE_NUM" cargo test -- --ignored
           doppler run -p github-mcp -c dev -- bash ./scripts/e2e_live.sh
 
       - name: Upload E2E artifacts (mutations)

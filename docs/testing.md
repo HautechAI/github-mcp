@@ -5,23 +5,27 @@ Testing
   - Tools are cached via `Swatinem/rust-cache@v2`.
   - Tooling pinned: `cargo-llvm-cov@0.6.9`, `nextest@0.9.68`.
 
-Live API tests (gated)
+Live API tests (ignored by default)
 - Live tests are in `tests/live/` and are marked with `#[ignore]` so they do not run by default.
-- To run locally:
-  - Set `GITHUB_TOKEN` (or `GH_TOKEN`).
-  - Set `LIVE_API_TESTS=1`.
-  - Set repository fixtures:
+- Prerequisites when running ignored tests:
+  - Must run under a Doppler context (environment contains `DOPPLER_*` markers). Recommended command below.
+  - A GitHub token must be present via env: `GITHUB_TOKEN` or `GH_TOKEN`.
+  - Repository fixtures are required:
     - `E2E_OWNER` (org/user)
     - `E2E_REPO`
-    - Optional: `E2E_ISSUE_NUM`, `E2E_PR_NUM`
-  - Command:
-    - `cargo test -- --ignored` (or `cargo llvm-cov nextest -- --run-ignored yes` for coverage)
+    - `E2E_ISSUE_NUM` (number)
+    - Optional: `E2E_PR_NUM`
+- If any prerequisite is missing and you run with `--ignored`, tests will panic fast with guidance (they no longer skip silently).
+- Local run example (Doppler):
+  - `doppler run -p github-mcp -c dev -- env E2E_OWNER=HautechAI E2E_REPO=github-mcp-test-repo E2E_ISSUE_NUM=10 cargo test -- --ignored`
+  - For coverage with ignored tests: `doppler run -p github-mcp -c dev -- env E2E_OWNER=... E2E_REPO=... E2E_ISSUE_NUM=... cargo llvm-cov nextest -- --run-ignored yes`
 
 CI behavior
-- The coverage workflow runs only unit/mocked tests by default; live tests are enabled when both `LIVE_API_TESTS=1` repository/environment variable is set and the workflow has access to `GITHUB_TOKEN`.
-- When enabled, live tests are run via nextest with reduced parallelism (`--jobs=2`).
+- The main CI runs unit/mocked tests on all platforms.
+- Live tests run in a dedicated job under Doppler, with required fixtures set, using: `doppler run -p github-mcp -c dev -- env E2E_OWNER=... E2E_REPO=... E2E_ISSUE_NUM=... cargo test -- --ignored`.
+- The E2E harness (`scripts/e2e_live.sh`) is also executed under Doppler in CI.
+- If Doppler or required env is missing, the job fails by design.
 
 Notes
 - Live tests are read-only and should not mutate repositories. If you add new live tests, keep them read-only.
-- If CI secrets are missing, live tests are skipped gracefully.
-
+- The E2E harness enforces Doppler and token presence and will fail fast if not provided.
