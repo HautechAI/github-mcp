@@ -6,8 +6,8 @@ Design goals
 - Consistent error meta and pagination across tools.
 
 Tools Index
-- Issues: [list_issues](#tool-list_issues), [get_issue](#tool-get_issue), [list_issue_comments_plain](#tool-list_issue_comments_plain)
-- Pull Requests: [list_pull_requests](#tool-list_pull_requests), [get_pull_request](#tool-get_pull_request), [get_pr_status_summary](#tool-get_pr_status_summary), [list_pr_comments_plain](#tool-list_pr_comments_plain), [list_pr_review_comments_plain](#tool-list_pr_review_comments_plain), [list_pr_review_threads_light](#tool-list_pr_review_threads_light), [resolve_pr_review_thread](#tool-resolve_pr_review_thread), [unresolve_pr_review_thread](#tool-unresolve_pr_review_thread), [list_pr_reviews_light](#tool-list_pr_reviews_light), [list_pr_commits_light](#tool-list_pr_commits_light), [list_pr_files_light](#tool-list_pr_files_light), [get_pr_diff](#tool-get_pr_diff), [get_pr_patch](#tool-get_pr_patch)
+- Issues: [list_issues](#tool-list_issues), [get_issue](#tool-get_issue), [get_issue_overview](#tool-get_issue_overview), [list_issue_comments_plain](#tool-list_issue_comments_plain)
+- Pull Requests: [list_pull_requests](#tool-list_pull_requests), [get_pull_request](#tool-get_pull_request), [get_pull_request_overview](#tool-get_pull_request_overview), [get_pr_status_summary](#tool-get_pr_status_summary), [list_pr_comments_plain](#tool-list_pr_comments_plain), [list_pr_review_comments_plain](#tool-list_pr_review_comments_plain), [list_pr_review_threads_light](#tool-list_pr_review_threads_light), [resolve_pr_review_thread](#tool-resolve_pr_review_thread), [unresolve_pr_review_thread](#tool-unresolve_pr_review_thread), [list_pr_reviews_light](#tool-list_pr_reviews_light), [list_pr_commits_light](#tool-list_pr_commits_light), [list_pr_files_light](#tool-list_pr_files_light), [get_pr_diff](#tool-get_pr_diff), [get_pr_patch](#tool-get_pr_patch)
 - Workflows: [list_workflows_light](#tool-list_workflows_light), [list_workflow_runs_light](#tool-list_workflow_runs_light), [get_workflow_run_light](#tool-get_workflow_run_light), [list_workflow_jobs_light](#tool-list_workflow_jobs_light), [get_workflow_job_logs](#tool-get_workflow_job_logs), [rerun_workflow_run](#tool-rerun_workflow_run), [rerun_workflow_run_failed](#tool-rerun_workflow_run_failed), [cancel_workflow_run](#tool-cancel_workflow_run)
 - Secrets/Variables/Environments: [list_repo_secrets_light](#tool-list_repo_secrets_light), [list_repo_variables_light](#tool-list_repo_variables_light), [list_environments_light](#tool-list_environments_light), [list_environment_variables_light](#tool-list_environment_variables_light)
 
@@ -1234,3 +1234,70 @@ Cross-cutting notes
   - Output: { item: { name }, meta.rate }
   - API: GET /repos/{owner}/{repo}/actions/secrets/public-key; libsodium sealed box encrypt; PUT /repos/{owner}/{repo}/actions/secrets/{name}
   - Notes: secret values are redacted from diagnostics and not echoed in outputs.
+## Tool: get_issue_overview
+Purpose: Get an issue overview with optional body and comments sections and per-section pagination.
+
+Inputs
+
+| name | type | required | notes |
+| --- | --- | --- | --- |
+| owner | string | yes |  |
+| repo | string | yes |  |
+| number | int | yes | issue number |
+| include | string[] | no | any of: body, comments |
+| section_limits | object | no | per-section limits (e.g., {comments: 50}) |
+| section_cursors | object | no | per-section cursors |
+| include_author | bool | no | adds author_login when true |
+
+Outputs
+
+| field | type | presence | notes |
+| --- | --- | --- | --- |
+| item.id | string | always |  |
+| item.number | int | always |  |
+| item.title | string | always |  |
+| item.state | string | always |  |
+| item.body | string | optional | when included |
+| item.comments.items[] | object | optional | when included |
+| item.comments.meta.rate | object | optional | present when `_include_rate` is true |
+| meta.rate | object | optional | present when `_include_rate` is true |
+
+API
+- REST + GraphQL mixed; comments via REST for Link pagination; rate extracted per section.
+
+## Tool: get_pull_request_overview
+Purpose: Get a PR overview with optional sections and per-section pagination.
+
+Inputs
+
+| name | type | required | notes |
+| --- | --- | --- | --- |
+| owner | string | yes |  |
+| repo | string | yes |  |
+| number | int | yes | PR number |
+| include | string[] | no | any of: body, comments, review_comments, reviews, commits, files, status_summary |
+| section_limits | object | no | per-section limits |
+| section_cursors | object | no | per-section cursors |
+| include_author | bool | no | adds author_login when true |
+| include_location | bool | no | adds location info for review comments when true |
+| status_limit_contexts | string[] | no | limit status checks/contexts considered |
+
+Outputs
+
+| field | type | presence | notes |
+| --- | --- | --- | --- |
+| item.id | string | always |  |
+| item.number | int | always |  |
+| item.title | string | always |  |
+| item.state | string | always |  |
+| item.is_draft | bool | always |  |
+| item.body | string | optional | when included |
+| item.comments/review_comments/reviews/commits/files | object | optional | when included; each has items[] and meta with optional rate |
+| item.status_summary.counts | object | optional | success/failure/neutral counts |
+| item.status_summary.overall_state | string | optional | success/failure/neutral |
+| item.status_summary.meta.rate | object | optional | rate for status_summary GraphQL query when `_include_rate` is true |
+| meta.rate | object | optional | present when `_include_rate` is true |
+
+Notes
+- status_summary state mapping: SKIPPED/NEUTRAL => success; ACTION_REQUIRED/STARTUP_FAILURE/STALE => failure.
+- Per-section meta.rate populated when `_include_rate` is true; pagination handled independently per included section.
