@@ -75,13 +75,22 @@ fn prune_meta(structured: &mut Value, include_rate: bool) {
 // - content: always a single text block so clients can render something.
 // - structuredContent: preserves the previous structured JSON shape to minimize breakage.
 // - isError: included only when true to keep payloads small.
+fn redact_text(s: &str) -> String {
+    let lower = s.to_ascii_lowercase();
+    if lower.contains("secret") || lower.contains("encrypted_value") {
+        "[redacted]".to_string()
+    } else {
+        s.to_string()
+    }
+}
+
 pub fn mcp_wrap(mut structured: Value, text_opt: Option<String>, is_error: bool) -> Value {
     // Apply output shaping immediately before wrapping.
     let include_rate = current_include_rate();
     prune_meta(&mut structured, include_rate);
     let text = match text_opt {
-        Some(s) => s,
-        None => serde_json::to_string(&structured).unwrap_or_else(|_| "{}".to_string()),
+        Some(s) => redact_text(&s),
+        None => redact_text(&serde_json::to_string(&structured).unwrap_or_else(|_| "{}".to_string())),
     };
     let mut obj = serde_json::json!({
         "content": [{ "type": "text", "text": text }],
