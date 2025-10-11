@@ -79,7 +79,9 @@ session_call() {
   local params_json="$1"; shift || true
   local out_var="$1"; shift || true
   local req
-  req=$(node -e "process.stdout.write(JSON.stringify({method: '$method', params: $params_json || {}}))")
+  # Default params in bash to avoid JS eval of undefined/empty
+  local params_nonempty="${params_json:-{}}"
+  req=$(node -e "process.stdout.write(JSON.stringify({method: '$method', params: $params_nonempty}))")
   # Write request
   if ! printf '%s\n' "$req" >&${SESSION_IN_FD}; then
     echo "[e2e][fatal] failed to write to session (method=$method)" | tee -a "$LOG" >&2
@@ -219,7 +221,10 @@ tool_call() {
   echo "[e2e] tools/call ${name} ${args_json}" | tee -a "$LOG" >&2
   local resp
   # inspector semantics: tools/call returns {result:{content:[], structuredContent:...}}
-  if ! session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name: '$name', arguments: $args_json}))")" resp; then
+  # Build params JSON via env to avoid inlining JSON into JS
+  local params_json
+  params_json=$(NAME="$name" ARGS_JSON="$args_json" node -e 'const name=process.env.NAME; const args=JSON.parse(process.env.ARGS_JSON||"{}"); process.stdout.write(JSON.stringify({name, arguments: args}));')
+  if ! session_call "tools/call" "$params_json" resp; then
     session_stop; exit 1; fi
   printf '%s' "$resp" | save_json "$out"
   assert_envelope_ok "$out"
@@ -361,12 +366,12 @@ try{
 NODE
 )
 
-if [ -n "$LATEST_RUN_ID" ]; then
-  tool_call get_workflow_run_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID}"
-  assert_has_field "$ROOT_DIR/out-get_workflow_run_light.json" "o.structuredContent?.item?.id" || true
+  if [ -n "$LATEST_RUN_ID" ]; then
+    tool_call get_workflow_run_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID}"
+    assert_has_field "$ROOT_DIR/out-get_workflow_run_light.json" "o.structuredContent?.item?.id" || true
 
-  tool_call list_workflow_jobs_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID,\"per_page\":50,\"page\":1}"
-  assert_has_field "$ROOT_DIR/out-list_workflow_jobs_light.json" "Array.isArray(o.structuredContent?.items)" || true
+    tool_call list_workflow_jobs_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID,\"per_page\":50,\"page\":1}"
+    assert_has_field "$ROOT_DIR/out-list_workflow_jobs_light.json" "Array.isArray(o.structuredContent?.items)" || true
 
   JOB_ID=$(node - "$ROOT_DIR/out-list_workflow_jobs_light.json" <<'NODE'
 const fs=require('fs');
@@ -387,11 +392,17 @@ NODE
 
   if [ "$ENABLE_MUTATIONS" = "true" ]; then
     echo "[e2e] mutations enabled; attempting rerun/cancel (best-effort)" | tee -a "$LOG" >&2
-    session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name:'rerun_workflow_run',arguments:{owner:'$OWNER',repo:'$REPO',run_id:$LATEST_RUN_ID}}))")" resp || true
+    # Build robust params for rerun_workflow_run
+    params_json=$(NAME="rerun_workflow_run" OWNER="$OWNER" REPO="$REPO" RUN_ID="$LATEST_RUN_ID" node -e 'const name=process.env.NAME; const owner=process.env.OWNER; const repo=process.env.REPO; const run_id=Number(process.env.RUN_ID); process.stdout.write(JSON.stringify({name, arguments:{owner, repo, run_id}}));')
+    session_call "tools/call" "$params_json" resp || true
     [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-rerun_workflow_run.json" || true
-    session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name:'rerun_workflow_run_failed',arguments:{owner:'$OWNER',repo:'$REPO',run_id:$LATEST_RUN_ID}}))")" resp || true
+    # Build robust params for rerun_workflow_run_failed
+    params_json=$(NAME="rerun_workflow_run_failed" OWNER="$OWNER" REPO="$REPO" RUN_ID="$LATEST_RUN_ID" node -e 'const name=process.env.NAME; const owner=process.env.OWNER; const repo=process.env.REPO; const run_id=Number(process.env.RUN_ID); process.stdout.write(JSON.stringify({name, arguments:{owner, repo, run_id}}));')
+    session_call "tools/call" "$params_json" resp || true
     [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-rerun_workflow_run_failed.json" || true
-    session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name:'cancel_workflow_run',arguments:{owner:'$OWNER',repo:'$REPO',run_id:$LATEST_RUN_ID}}))")" resp || true
+    # Build robust params for cancel_workflow_run
+    params_json=$(NAME="cancel_workflow_run" OWNER="$OWNER" REPO="$REPO" RUN_ID="$LATEST_RUN_ID" node -e 'const name=process.env.NAME; const owner=process.env.OWNER; const repo=process.env.REPO; const run_id=Number(process.env.RUN_ID); process.stdout.write(JSON.stringify({name, arguments:{owner, repo, run_id}}));')
+    session_call "tools/call" "$params_json" resp || true
     [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-cancel_workflow_run.json" || true
   fi
 else
@@ -410,9 +421,13 @@ try{
 NODE
 )
   if [ -n "$THREAD_ID" ] && [ "$THREAD_ID" != "null" ]; then
-    session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name:'resolve_pr_review_thread',arguments:{thread_id:'$THREAD_ID'}}))")" resp || true
+    # Build robust params for resolve_pr_review_thread
+    params_json=$(NAME="resolve_pr_review_thread" THREAD_ID="$THREAD_ID" node -e 'const name=process.env.NAME; const thread_id=String(process.env.THREAD_ID||""); process.stdout.write(JSON.stringify({name, arguments:{thread_id}}));')
+    session_call "tools/call" "$params_json" resp || true
     [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-resolve_pr_review_thread.json" || true
-    session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name:'unresolve_pr_review_thread',arguments:{thread_id:'$THREAD_ID'}}))")" resp || true
+    # Build robust params for unresolve_pr_review_thread
+    params_json=$(NAME="unresolve_pr_review_thread" THREAD_ID="$THREAD_ID" node -e 'const name=process.env.NAME; const thread_id=String(process.env.THREAD_ID||""); process.stdout.write(JSON.stringify({name, arguments:{thread_id}}));')
+    session_call "tools/call" "$params_json" resp || true
     [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-unresolve_pr_review_thread.json" || true
   else
     echo "[e2e] skip resolve/unresolve (no thread)" | tee -a "$LOG" >&2
