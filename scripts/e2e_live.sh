@@ -393,6 +393,24 @@ NODE
     [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-rerun_workflow_run_failed.json" || true
     session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name:'cancel_workflow_run',arguments:{owner:'$OWNER',repo:'$REPO',run_id:$LATEST_RUN_ID}}))")" resp || true
     [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-cancel_workflow_run.json" || true
+
+    # Additional minimal mutation smoke
+    if has_tool create_issue; then
+      session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name:'create_issue',arguments:{owner:'$OWNER',repo:'$REPO',title:'[e2e] create_issue smoke'}}))")" resp || true
+      [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-create_issue.json" || true
+    fi
+    if has_tool add_issue_comment; then
+      session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name:'add_issue_comment',arguments:{owner:'$OWNER',repo:'$REPO',number:$ISSUE_NUM,body:'[e2e] add_issue_comment smoke'}}))")" resp || true
+      [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-add_issue_comment.json" || true
+    fi
+    if has_tool close_issue; then
+      session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name:'close_issue',arguments:{owner:'$OWNER',repo:'$REPO',number:$ISSUE_NUM}}))")" resp || true
+      [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-close_issue.json" || true
+    fi
+    if has_tool update_pr_branch; then
+      session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name:'update_pr_branch',arguments:{owner:'$OWNER',repo:'$REPO',number:$PR_NUM}}))")" resp || true
+      [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-update_pr_branch.json" || true
+    fi
   fi
 else
   echo "[e2e] no workflow runs found; skipping downstream actions checks" | tee -a "$LOG" >&2
