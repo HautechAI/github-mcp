@@ -1,1 +1,0 @@
-{"jsonrpc":"2.0","result":{"content":[{"text":"1 files","type":"text"}],"structuredContent":{"items":[{"additions":1,"changes":1,"deletions":0,"filename":"e2e-fixture.txt","patch":"@@ -0,0 +1 @@\n+E2E fixture 2025-10-08","sha":"37271481d2ac90a54fbf4d5a1e973fc94c9d549a","status":"added"}]}},"id":17}
