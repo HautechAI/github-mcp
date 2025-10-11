@@ -1893,6 +1893,147 @@ pub struct UpdatePullRequestOutput {
     pub error: Option<ErrorShape>,
 }
 
+// Core mutations: inputs/outputs used by server handlers
+#[derive(Debug, Deserialize)]
+pub struct MergePullRequestInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    pub merge_method: Option<String>,
+    pub commit_title: Option<String>,
+    pub commit_message: Option<String>,
+    pub expected_head_sha: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RequestReviewersInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    #[serde(default)]
+    pub reviewers: Vec<String>,
+    #[serde(default)]
+    pub team_reviewers: Vec<String>,
+}
+#[derive(Debug, Serialize)]
+pub struct RequestReviewersResult {
+    pub ok: bool,
+}
+#[derive(Debug, Serialize)]
+pub struct RequestReviewersOutput {
+    pub item: Option<RequestReviewersResult>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AddPrCommentInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    pub body: String,
+}
+#[derive(Debug, Serialize)]
+pub struct AddPrCommentResult {
+    pub id: String,
+    pub body: String,
+    pub created_at: String,
+}
+#[derive(Debug, Serialize)]
+pub struct AddPrCommentOutput {
+    pub item: Option<AddPrCommentResult>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AddPrReviewCommentInlineInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    pub body: String,
+    pub in_reply_to: Option<String>,
+    pub commit_id: Option<String>,
+    pub path: Option<String>,
+    pub side: Option<String>,
+    pub line: Option<i64>,
+    pub start_line: Option<i64>,
+    pub start_side: Option<String>,
+}
+#[derive(Debug, Serialize)]
+pub struct AddPrReviewCommentInlineResult {
+    pub id: String,
+    pub body: String,
+    pub created_at: String,
+}
+#[derive(Debug, Serialize)]
+pub struct AddPrReviewCommentInlineOutput {
+    pub item: Option<AddPrReviewCommentInlineResult>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SubmitPrReviewInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    pub event: String,
+    pub body: Option<String>,
+}
+#[derive(Debug, Serialize)]
+pub struct SubmitPrReviewResult {
+    pub id: i64,
+    pub state: String,
+}
+#[derive(Debug, Serialize)]
+pub struct SubmitPrReviewOutput {
+    pub item: Option<SubmitPrReviewResult>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MarkPrReadyOrDraftInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+}
+#[derive(Debug, Serialize)]
+pub struct MarkPrReadyOrDraftResult {
+    pub id: String,
+    pub is_draft: bool,
+}
+#[derive(Debug, Serialize)]
+pub struct MarkPrReadyOrDraftOutput {
+    pub item: Option<MarkPrReadyOrDraftResult>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdatePrBranchInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+}
+#[derive(Debug, Serialize)]
+pub struct UpdatePrBranchResult {
+    pub message: String,
+}
+#[derive(Debug, Serialize)]
+pub struct UpdatePrBranchOutput {
+    pub item: Option<UpdatePrBranchResult>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ForkRepositoryInput {
     pub owner: String,
