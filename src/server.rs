@@ -5312,7 +5312,11 @@ fn handle_get_issue_overview(id: Option<Id>, params: Value) -> Response {
         }
         (Some(out), Meta{ next_cursor: None, has_more: false, rate: gql_meta.rate }, None)
     });
-    let out = GetIssueOverviewOutput { item, meta, error: err };
+    let out = GetIssueOverviewOutput {
+        item,
+        meta,
+        error: err,
+    };
     let structured = serde_json::to_value(&out).unwrap();
     let text = structured
         .get("item")
@@ -5556,7 +5560,11 @@ fn handle_get_pull_request_overview(id: Option<Id>, params: Value) -> Response {
 
         (Some(out), Meta{ next_cursor: None, has_more: false, rate: gql_meta.rate }, None)
     });
-    let out = GetPullRequestOverviewOutput { item, meta, error: err };
+    let out = GetPullRequestOverviewOutput {
+        item,
+        meta,
+        error: err,
+    };
     let structured = serde_json::to_value(&out).unwrap();
     let text = structured
         .get("item")

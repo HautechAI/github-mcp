@@ -791,11 +791,23 @@ pub struct PrOverviewSection<T> {
     pub meta: Meta,
 }
 #[derive(Debug, Serialize)]
-pub struct StatusSummaryCounts { pub success: i32, pub pending: i32, pub failure: i32 }
+pub struct StatusSummaryCounts {
+    pub success: i32,
+    pub pending: i32,
+    pub failure: i32,
+}
 #[derive(Debug, Serialize)]
-pub struct StatusSummary { pub overall_state: String, pub counts: StatusSummaryCounts, #[serde(skip_serializing_if = "Option::is_none")] pub failing_contexts: Option<Vec<String>> }
+pub struct StatusSummary {
+    pub overall_state: String,
+    pub counts: StatusSummaryCounts,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failing_contexts: Option<Vec<String>>,
+}
 #[derive(Debug, Serialize)]
-pub struct PrOverviewStatusSection { pub item: Option<StatusSummary>, pub limit_contexts: i64 }
+pub struct PrOverviewStatusSection {
+    pub item: Option<StatusSummary>,
+    pub limit_contexts: i64,
+}
 #[derive(Debug, Serialize)]
 pub struct GetPullRequestOverviewItem {
     pub id: String,
