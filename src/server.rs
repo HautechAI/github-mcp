@@ -310,6 +310,15 @@ fn handle_tools_call(id: Option<Id>, params: Value) -> Response {
         "get_release" => handle_get_release(id, args),
         "list_starred_repositories" => handle_list_starred_repositories(id, args),
         "merge_pr" => handle_merge_pr(id, args),
+        // Core mutation aliases/new
+        "merge_pull_request" => handle_merge_pull_request(id, args),
+        "request_reviewers" => handle_request_reviewers(id, args),
+        "add_pr_comment" => handle_add_pr_comment(id, args),
+        "add_pr_review_comment_inline" => handle_add_pr_review_comment_inline(id, args),
+        "submit_pr_review" => handle_submit_pr_review(id, args),
+        "mark_pull_request_ready_for_review" => handle_mark_pr_ready_for_review(id, args),
+        "convert_pull_request_to_draft" => handle_convert_pr_to_draft(id, args),
+        "update_pr_branch" => handle_update_pr_branch(id, args),
         "search_issues" => handle_search_issues(id, args),
         "search_pull_requests" => handle_search_pull_requests(id, args),
         "search_repositories" => handle_search_repositories(id, args),
@@ -4319,6 +4328,598 @@ fn handle_merge_pr(id: Option<Id>, params: Value) -> Response {
         .get("error")
         .map(|e| !e.is_null())
         .unwrap_or(false);
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_merge_pull_request(id: Option<Id>, params: Value) -> Response {
+    // Map to existing merge_pr but with expected_head_sha guard mapped to sha
+    let mut input: MergePullRequestInput = match serde_json::from_value(params.clone()) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    // Build MergePrInput payload
+    let mapped = serde_json::json!({
+        "owner": input.owner,
+        "repo": input.repo,
+        "number": input.number,
+        "merge_method": input.merge_method,
+        "commit_title": input.commit_title,
+        "commit_message": input.commit_message,
+        "sha": input.expected_head_sha,
+    });
+    handle_merge_pr(id, mapped)
+}
+
+fn handle_request_reviewers(id: Option<Id>, params: Value) -> Response {
+    let input: RequestReviewersInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        #[derive(Serialize)]
+        struct Body {
+            reviewers: Vec<String>,
+            team_reviewers: Vec<String>,
+        }
+        #[derive(Deserialize)]
+        struct Resp {}
+        let path = format!(
+            "/repos/{}/{}/pulls/{}/requested_reviewers",
+            input.owner, input.repo, input.number
+        );
+        let body = Body {
+            reviewers: input.reviewers,
+            team_reviewers: input.team_reviewers,
+        };
+        let resp = http::rest_post_json::<Body, Resp>(&client, &cfg, &path, &body).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        (
+            Some(RequestReviewersResult { ok: true }),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
+    });
+    let out = RequestReviewersOutput {
+        item,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = Some("requested reviewers".to_string());
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_add_pr_comment(id: Option<Id>, params: Value) -> Response {
+    let input: AddPrCommentInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        #[derive(Serialize)]
+        struct Body {
+            body: String,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            id: i64,
+            body: String,
+            created_at: String,
+        }
+        let path = format!(
+            "/repos/{}/{}/issues/{}/comments",
+            input.owner, input.repo, input.number
+        );
+        let body = Body { body: input.body };
+        let resp = http::rest_post_json::<Body, Resp>(&client, &cfg, &path, &body).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let r = resp.value.unwrap();
+        (
+            Some(AddPrCommentResult {
+                id: r.id.to_string(),
+                body: r.body,
+                created_at: r.created_at,
+            }),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
+    });
+    let out = AddPrCommentOutput {
+        item,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = Some("added PR comment".into());
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_add_pr_review_comment_inline(id: Option<Id>, params: Value) -> Response {
+    let input: AddPrReviewCommentInlineInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        #[derive(Serialize)]
+        struct Body {
+            body: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            in_reply_to: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            commit_id: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            path: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            side: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            line: Option<i64>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            start_line: Option<i64>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            start_side: Option<String>,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            id: i64,
+            node_id: Option<String>,
+            body: String,
+            created_at: String,
+        }
+        let path = format!(
+            "/repos/{}/{}/pulls/{}/comments",
+            input.owner, input.repo, input.number
+        );
+        let body = Body {
+            body: input.body,
+            in_reply_to: input.in_reply_to,
+            commit_id: input.commit_id,
+            path: input.path,
+            side: input.side,
+            line: input.line,
+            start_line: input.start_line,
+            start_side: input.start_side,
+        };
+        let resp = http::rest_post_json::<Body, Resp>(&client, &cfg, &path, &body).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let r = resp.value.unwrap();
+        let id = r.node_id.unwrap_or_else(|| r.id.to_string());
+        (
+            Some(AddPrReviewCommentInlineResult {
+                id,
+                body: r.body,
+                created_at: r.created_at,
+            }),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
+    });
+    let out = AddPrReviewCommentInlineOutput {
+        item,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = Some("added PR review comment".into());
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_submit_pr_review(id: Option<Id>, params: Value) -> Response {
+    let input: SubmitPrReviewInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        #[derive(Serialize)]
+        struct Body {
+            event: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            body: Option<String>,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            id: i64,
+            state: String,
+        }
+        let path = format!(
+            "/repos/{}/{}/pulls/{}/reviews",
+            input.owner, input.repo, input.number
+        );
+        let body = Body {
+            event: input.event,
+            body: input.body,
+        };
+        let resp = http::rest_post_json::<Body, Resp>(&client, &cfg, &path, &body).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let r = resp.value.unwrap();
+        (
+            Some(SubmitPrReviewResult {
+                id: r.id,
+                state: r.state,
+            }),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
+    });
+    let out = SubmitPrReviewOutput {
+        item,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = Some("submitted PR review".into());
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_mark_pr_ready_for_review(id: Option<Id>, params: Value) -> Response {
+    let input: MarkPrReadyOrDraftInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
+        // Resolve PR node ID via GraphQL then mutate
+        let q = r#"
+        query GetPrId($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { id isDraft } } rateLimit { remaining used resetAt } }
+        "#;
+        #[derive(Deserialize)] struct PR { id: String, isDraft: bool }
+        #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
+        #[derive(Deserialize)] struct Data { repository: Option<Repo> }
+        let vars = serde_json::json!({"owner": input.owner, "repo": input.repo, "number": input.number});
+        let (data, m, e0) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, q, &vars).await;
+        if let Some(e) = e0 { return (None, Meta{ next_cursor: None, has_more: false, rate: m.rate }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
+        let pr = match data.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p)=>p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: m.rate }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
+        let q2 = r#"
+        mutation MarkReady($pullRequestId: ID!) { markPullRequestReadyForReview(input:{pullRequestId:$pullRequestId}) { pullRequest { id isDraft } } rateLimit { remaining used resetAt } }
+        "#;
+        #[derive(Deserialize)] struct PR2 { id: String, isDraft: bool }
+        #[derive(Deserialize)] struct Payload { pullRequest: Option<PR2> }
+        #[derive(Deserialize)] struct Data2 { markPullRequestReadyForReview: Option<Payload> }
+        let vars2 = serde_json::json!({"pullRequestId": pr.id});
+        let (data2, m2, e2) = http::graphql_post::<serde_json::Value, Data2, serde_json::Value>(&client, &cfg, q2, &vars2).await;
+        if let Some(e) = e2 { return (None, Meta{ next_cursor: None, has_more: false, rate: m2.rate }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
+        let pr2 = data2.and_then(|d| d.markPullRequestReadyForReview).and_then(|p| p.pullRequest).ok_or_else(|| ()).ok();
+        match pr2 {
+            Some(p) => (Some(MarkPrReadyOrDraftResult{ id: p.id, is_draft: p.isDraft }), Meta{ next_cursor: None, has_more: false, rate: m2.rate }, None),
+            None => (None, Meta{ next_cursor: None, has_more: false, rate: m2.rate }, Some(ErrorShape{ code: "server_error".into(), message: "Mutation response missing".into(), retriable: false }))
+        }
+    });
+    let out = MarkPrReadyOrDraftOutput {
+        item,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = Some("marked PR ready".into());
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_convert_pr_to_draft(id: Option<Id>, params: Value) -> Response {
+    let input: MarkPrReadyOrDraftInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
+        let q = r#"
+        query GetPrId($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { id isDraft } } rateLimit { remaining used resetAt } }
+        "#;
+        #[derive(Deserialize)] struct PR { id: String, isDraft: bool }
+        #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
+        #[derive(Deserialize)] struct Data { repository: Option<Repo> }
+        let vars = serde_json::json!({"owner": input.owner, "repo": input.repo, "number": input.number});
+        let (data, m, e0) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, q, &vars).await;
+        if let Some(e) = e0 { return (None, Meta{ next_cursor: None, has_more: false, rate: m.rate }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
+        let pr = match data.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p)=>p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: m.rate }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
+        let q2 = r#"
+        mutation ToDraft($pullRequestId: ID!) { convertPullRequestToDraft(input:{pullRequestId:$pullRequestId}) { pullRequest { id isDraft } } rateLimit { remaining used resetAt } }
+        "#;
+        #[derive(Deserialize)] struct PR2 { id: String, isDraft: bool }
+        #[derive(Deserialize)] struct Payload { pullRequest: Option<PR2> }
+        #[derive(Deserialize)] struct Data2 { convertPullRequestToDraft: Option<Payload> }
+        let vars2 = serde_json::json!({"pullRequestId": pr.id});
+        let (data2, m2, e2) = http::graphql_post::<serde_json::Value, Data2, serde_json::Value>(&client, &cfg, q2, &vars2).await;
+        if let Some(e) = e2 { return (None, Meta{ next_cursor: None, has_more: false, rate: m2.rate }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
+        let pr2 = data2.and_then(|d| d.convertPullRequestToDraft).and_then(|p| p.pullRequest).ok_or_else(|| ()).ok();
+        match pr2 {
+            Some(p) => (Some(MarkPrReadyOrDraftResult{ id: p.id, is_draft: p.isDraft }), Meta{ next_cursor: None, has_more: false, rate: m2.rate }, None),
+            None => (None, Meta{ next_cursor: None, has_more: false, rate: m2.rate }, Some(ErrorShape{ code: "server_error".into(), message: "Mutation response missing".into(), retriable: false }))
+        }
+    });
+    let out = MarkPrReadyOrDraftOutput {
+        item,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = Some("converted PR to draft".into());
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_update_pr_branch(id: Option<Id>, params: Value) -> Response {
+    let input: UpdatePrBranchInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        #[derive(Deserialize)]
+        struct Resp {
+            message: Option<String>,
+        }
+        let path = format!(
+            "/repos/{}/{}/pulls/{}/update-branch",
+            input.owner, input.repo, input.number
+        );
+        // Empty body per API
+        let body = serde_json::json!({});
+        let resp =
+            http::rest_put_json::<serde_json::Value, Resp>(&client, &cfg, &path, &body).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let msg = resp
+            .value
+            .and_then(|v| v.message)
+            .unwrap_or_else(|| "branch updated".into());
+        (
+            Some(UpdatePrBranchResult { message: msg }),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
+    });
+    let out = UpdatePrBranchOutput {
+        item,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = Some("updated PR branch".into());
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }

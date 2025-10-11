@@ -483,6 +483,129 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
         }),
     };
 
+    // Core mutations (review loop + merge)
+    let request_reviewers = ToolDescriptor {
+        name: "request_reviewers".into(),
+        description: "Request reviewers for a pull request".into(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "owner": {"type": "string"},
+                "repo": {"type": "string"},
+                "number": {"type": "integer"},
+                "reviewers": {"type": "array", "items": {"type": "string"}},
+                "team_reviewers": {"type": "array", "items": {"type": "string"}}
+            },
+            "required": ["owner", "repo", "number"]
+        }),
+    };
+    let add_pr_comment = ToolDescriptor {
+        name: "add_pr_comment".into(),
+        description: "Add an issue-style comment on a PR".into(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "owner": {"type": "string"},
+                "repo": {"type": "string"},
+                "number": {"type": "integer"},
+                "body": {"type": "string"}
+            },
+            "required": ["owner", "repo", "number", "body"]
+        }),
+    };
+    let add_pr_review_comment_inline = ToolDescriptor {
+        name: "add_pr_review_comment_inline".into(),
+        description: "Add a PR review comment (inline or reply)".into(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "owner": {"type": "string"},
+                "repo": {"type": "string"},
+                "number": {"type": "integer"},
+                "body": {"type": "string"},
+                "in_reply_to": {"type": "string"},
+                "commit_id": {"type": "string"},
+                "path": {"type": "string"},
+                "side": {"type": "string", "enum": ["LEFT","RIGHT"]},
+                "line": {"type": "integer"},
+                "start_line": {"type": "integer"},
+                "start_side": {"type": "string", "enum": ["LEFT","RIGHT","SIDELESS"]}
+            },
+            "required": ["owner", "repo", "number", "body"]
+        }),
+    };
+    let submit_pr_review = ToolDescriptor {
+        name: "submit_pr_review".into(),
+        description: "Submit a PR review with event".into(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "owner": {"type": "string"},
+                "repo": {"type": "string"},
+                "number": {"type": "integer"},
+                "event": {"type": "string", "enum": ["COMMENT","APPROVE","REQUEST_CHANGES"]},
+                "body": {"type": "string"}
+            },
+            "required": ["owner", "repo", "number", "event"]
+        }),
+    };
+    let mark_ready = ToolDescriptor {
+        name: "mark_pull_request_ready_for_review".into(),
+        description: "Mark a PR ready for review (GraphQL)".into(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "owner": {"type": "string"},
+                "repo": {"type": "string"},
+                "number": {"type": "integer"}
+            },
+            "required": ["owner","repo","number"]
+        }),
+    };
+    let convert_to_draft = ToolDescriptor {
+        name: "convert_pull_request_to_draft".into(),
+        description: "Convert a PR to draft (GraphQL)".into(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"}},
+            "required": ["owner","repo","number"]
+        }),
+    };
+    let merge_pull_request = ToolDescriptor {
+        name: "merge_pull_request".into(),
+        description: "Merge a PR (alias; supports expected_head_sha guard)".into(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "owner": {"type": "string"},
+                "repo": {"type": "string"},
+                "number": {"type": "integer"},
+                "merge_method": {"type": "string", "enum": ["merge","squash","rebase"]},
+                "commit_title": {"type": "string"},
+                "commit_message": {"type": "string"},
+                "expected_head_sha": {"type": "string"}
+            },
+            "required": ["owner","repo","number"]
+        }),
+    };
+    let update_pr_branch = ToolDescriptor {
+        name: "update_pr_branch".into(),
+        description: "Update PR branch from base (REST)".into(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"}},
+            "required": ["owner","repo","number"]
+        }),
+    };
+
     vec![
         ping,
         list_issues,
@@ -545,6 +668,14 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
         get_pr_diff,
         get_pr_patch,
         pr_summary,
+        request_reviewers,
+        add_pr_comment,
+        add_pr_review_comment_inline,
+        submit_pr_review,
+        mark_ready,
+        convert_to_draft,
+        merge_pull_request,
+        update_pr_branch,
         list_repo_secrets_light,
         list_repo_variables_light,
         list_environments_light,
