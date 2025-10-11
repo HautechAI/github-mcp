@@ -90,7 +90,9 @@ pub fn mcp_wrap(mut structured: Value, text_opt: Option<String>, is_error: bool)
     prune_meta(&mut structured, include_rate);
     let text = match text_opt {
         Some(s) => redact_text(&s),
-        None => redact_text(&serde_json::to_string(&structured).unwrap_or_else(|_| "{}".to_string())),
+        None => {
+            redact_text(&serde_json::to_string(&structured).unwrap_or_else(|_| "{}".to_string()))
+        }
     };
     let mut obj = serde_json::json!({
         "content": [{ "type": "text", "text": text }],
