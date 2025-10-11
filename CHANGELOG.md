@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file by Release Please.
 
+## [1.0.0](https://github.com/HautechAI/github-mcp/compare/v0.5.0...v1.0.0) (2025-10-11)
+
+
+### ⚠️ Breaking Changes
+
+- Canonicalize tool names; remove `_plain`/`_light` suffixes and expose only unsuffixed names. See migration mapping below. Closes #94.
+
+Migration mapping (old → new):
+
+- list_issue_comments_plain → list_issue_comments
+- list_pr_comments_plain → list_pr_comments
+- list_pr_review_comments_plain → list_pr_review_comments
+- list_pr_review_threads_light → list_pr_review_threads
+- list_pr_reviews_light → list_pr_reviews
+- list_pr_commits_light → list_pr_commits
+- list_pr_files_light → list_pr_files
+- list_workflows_light → list_workflows
+- list_workflow_runs_light → list_workflow_runs
+- get_workflow_run_light → get_workflow_run
+- list_workflow_jobs_light → list_workflow_jobs
+- list_repo_secrets_light → list_repo_secrets
+- list_repo_variables_light → list_repo_variables
+- list_environments_light → list_environments
+- list_environment_variables_light → list_environment_variables
+
+No input/output shapes changed; only the tool names.
+
+### Docs
+
+- Update README and docs to reference canonical tool names.
+
+### Tests
+
+- Update tests and e2e scripts to new names; assert tools/list surfaces only canonical names.
+
 ## [0.5.0](https://github.com/HautechAI/github-mcp/compare/v0.4.1...v0.5.0) (2025-10-10)
 
 

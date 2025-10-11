@@ -65,8 +65,8 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
     };
 
     let list_issue_comments_plain = ToolDescriptor {
-        name: "list_issue_comments_plain".into(),
-        description: "List issue comments (plain)".into(),
+        name: "list_issue_comments".into(),
+        description: "List issue comments".into(),
         input_schema: serde_json::json!({
             "type": "object",
             "additionalProperties": false,
@@ -119,8 +119,8 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
     };
 
     let list_pr_comments = ToolDescriptor {
-        name: "list_pr_comments_plain".into(),
-        description: "List PR issue comments (plain)".into(),
+        name: "list_pr_comments".into(),
+        description: "List PR issue comments".into(),
         input_schema: serde_json::json!({
             "type":"object","additionalProperties":false,
             "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"},"cursor":{"type":"string"},"limit":{"type":"integer"},"include_author":{"type":"boolean"}},
@@ -129,8 +129,8 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
     };
 
     let list_pr_review_comments = ToolDescriptor {
-        name: "list_pr_review_comments_plain".into(),
-        description: "List PR review comments (plain)".into(),
+        name: "list_pr_review_comments".into(),
+        description: "List PR review comments".into(),
         input_schema: serde_json::json!({
             "type":"object","additionalProperties":false,
             "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"},"cursor":{"type":"string"},"limit":{"type":"integer"},"include_author":{"type":"boolean"},"include_location":{"type":"boolean"}},
@@ -139,8 +139,8 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
     };
 
     let list_pr_review_threads = ToolDescriptor {
-        name: "list_pr_review_threads_light".into(),
-        description: "List PR review threads (light)".into(),
+        name: "list_pr_review_threads".into(),
+        description: "List PR review threads".into(),
         input_schema: serde_json::json!({
             "type":"object","additionalProperties":false,
             "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"},"cursor":{"type":"string"},"limit":{"type":"integer"},"include_author":{"type":"boolean"},"include_location":{"type":"boolean"}},
@@ -161,8 +161,8 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
     };
 
     let list_pr_reviews = ToolDescriptor {
-        name: "list_pr_reviews_light".into(),
-        description: "List PR reviews (light)".into(),
+        name: "list_pr_reviews".into(),
+        description: "List PR reviews".into(),
         input_schema: serde_json::json!({
             "type":"object","additionalProperties":false,
             "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"},"cursor":{"type":"string"},"limit":{"type":"integer"},"include_author":{"type":"boolean"}},
@@ -171,8 +171,8 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
     };
 
     let list_pr_commits = ToolDescriptor {
-        name: "list_pr_commits_light".into(),
-        description: "List PR commits (light)".into(),
+        name: "list_pr_commits".into(),
+        description: "List PR commits".into(),
         input_schema: serde_json::json!({
             "type":"object","additionalProperties":false,
             "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"},"cursor":{"type":"string"},"limit":{"type":"integer"},"include_author":{"type":"boolean"}},
@@ -181,7 +181,7 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
     };
 
     let list_pr_files = ToolDescriptor {
-        name: "list_pr_files_light".into(),
+        name: "list_pr_files".into(),
         description: "List PR files (REST)".into(),
         input_schema: serde_json::json!({
             "type":"object","additionalProperties":false,
@@ -203,7 +203,7 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
 
     // Secrets, Variables, Environments (REST light)
     let list_repo_secrets_light = ToolDescriptor {
-        name: "list_repo_secrets_light".into(),
+        name: "list_repo_secrets".into(),
         description: "List repository Actions secrets (metadata only)".into(),
         input_schema: serde_json::json!({
             "type":"object","additionalProperties":false,
@@ -218,7 +218,7 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
         }),
     };
     let list_repo_variables_light = ToolDescriptor {
-        name: "list_repo_variables_light".into(),
+        name: "list_repo_variables".into(),
         description: "List repository Actions variables (may include values)".into(),
         input_schema: serde_json::json!({
             "type":"object","additionalProperties":false,
@@ -233,8 +233,8 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
         }),
     };
     let list_environments_light = ToolDescriptor {
-        name: "list_environments_light".into(),
-        description: "List repository environments (light)".into(),
+        name: "list_environments".into(),
+        description: "List repository environments".into(),
         input_schema: serde_json::json!({
             "type":"object","additionalProperties":false,
             "properties":{
@@ -248,7 +248,7 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
         }),
     };
     let list_environment_variables_light = ToolDescriptor {
-        name: "list_environment_variables_light".into(),
+        name: "list_environment_variables".into(),
         description: "List environment-scoped Actions variables (may include values)".into(),
         input_schema: serde_json::json!({
             "type":"object","additionalProperties":false,

@@ -149,8 +149,8 @@ Usage examples
 - Pull Requests → get_pull_request
   - `echo '{"jsonrpc":"2.0","method":"tools/call","id":12,"params":{"name":"get_pull_request","arguments":{"owner":"octo","repo":"hello","number":1}}}' | cargo run -- --log-level warn`
 
-- Pull Requests → list_pr_files_light (include_patch)
-  - `echo '{"jsonrpc":"2.0","method":"tools/call","id":13,"params":{"name":"list_pr_files_light","arguments":{"owner":"octo","repo":"hello","number":1,"per_page":50,"page":1,"include_patch":true}}}' | cargo run -- --log-level warn`
+- Pull Requests → list_pr_files (include_patch)
+  - `echo '{"jsonrpc":"2.0","method":"tools/call","id":13,"params":{"name":"list_pr_files","arguments":{"owner":"octo","repo":"hello","number":1,"per_page":50,"page":1,"include_patch":true}}}' | cargo run -- --log-level warn`
 
 - Actions → get_workflow_job_logs (tail + timestamps)
   - `echo '{"jsonrpc":"2.0","method":"tools/call","id":14,"params":{"name":"get_workflow_job_logs","arguments":{"owner":"octo","repo":"hello","job_id":123456,"tail_lines":200,"include_timestamps":true}}}' | cargo run -- --log-level warn`
@@ -179,7 +179,7 @@ Example
 - Request (include rate):
 ```
 {"jsonrpc":"2.0","method":"tools/call","id":1,
- "params":{"name":"list_workflow_runs_light",
+ "params":{"name":"list_workflow_runs",
            "arguments":{"owner":"octo","repo":"hello","per_page":30,"_include_rate":true}}}
 ```
 - Response (excerpt):

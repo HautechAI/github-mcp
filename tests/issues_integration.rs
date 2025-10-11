@@ -106,7 +106,7 @@ fn list_issue_comments_happy_path() -> anyhow::Result<()> {
     });
     let req = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":1,
-        "params":{"name":"list_issue_comments_plain","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":true}}
+        "params":{"name":"list_issue_comments","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":true}}
     });
     let out = run_with_env(
         &req,

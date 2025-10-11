@@ -5,10 +5,10 @@ Purpose
 - Links jump directly to method specs in methods.md. Start lean; request heavier data only when needed.
 
 Quick Links
-- Issues: [list_issues](./methods.md#tool-list_issues) · [get_issue](./methods.md#tool-get_issue) · [list_issue_comments_plain](./methods.md#tool-list_issue_comments_plain)
-- Pull Requests: [list_pull_requests](./methods.md#tool-list_pull_requests) · [get_pull_request](./methods.md#tool-get_pull_request) · [get_pr_status_summary](./methods.md#tool-get_pr_status_summary) · [list_pr_comments_plain](./methods.md#tool-list_pr_comments_plain) · [list_pr_review_comments_plain](./methods.md#tool-list_pr_review_comments_plain) · [list_pr_review_threads_light](./methods.md#tool-list_pr_review_threads_light) · [resolve_pr_review_thread](./methods.md#tool-resolve_pr_review_thread) · [unresolve_pr_review_thread](./methods.md#tool-unresolve_pr_review_thread) · [list_pr_reviews_light](./methods.md#tool-list_pr_reviews_light) · [list_pr_commits_light](./methods.md#tool-list_pr_commits_light) · [list_pr_files_light](./methods.md#tool-list_pr_files_light) · [get_pr_diff](./methods.md#tool-get_pr_diff) · [get_pr_patch](./methods.md#tool-get_pr_patch)
-- Workflows (CI): [list_workflows_light](./methods.md#tool-list_workflows_light) · [list_workflow_runs_light](./methods.md#tool-list_workflow_runs_light) · [get_workflow_run_light](./methods.md#tool-get_workflow_run_light) · [list_workflow_jobs_light](./methods.md#tool-list_workflow_jobs_light) · [get_workflow_job_logs](./methods.md#tool-get_workflow_job_logs) · [rerun_workflow_run](./methods.md#tool-rerun_workflow_run) · [rerun_workflow_run_failed](./methods.md#tool-rerun_workflow_run_failed) · [cancel_workflow_run](./methods.md#tool-cancel_workflow_run)
-- Secrets/Vars/Environments: [list_repo_secrets_light](./methods.md#tool-list_repo_secrets_light) · [list_repo_variables_light](./methods.md#tool-list_repo_variables_light) · [list_environments_light](./methods.md#tool-list_environments_light) · [list_environment_variables_light](./methods.md#tool-list_environment_variables_light)
+- Issues: [list_issues](./methods.md#tool-list_issues) · [get_issue](./methods.md#tool-get_issue) · [list_issue_comments](./methods.md#tool-list_issue_comments)
+- Pull Requests: [list_pull_requests](./methods.md#tool-list_pull_requests) · [get_pull_request](./methods.md#tool-get_pull_request) · [get_pr_status_summary](./methods.md#tool-get_pr_status_summary) · [list_pr_comments](./methods.md#tool-list_pr_comments) · [list_pr_review_comments](./methods.md#tool-list_pr_review_comments) · [list_pr_review_threads](./methods.md#tool-list_pr_review_threads) · [resolve_pr_review_thread](./methods.md#tool-resolve_pr_review_thread) · [unresolve_pr_review_thread](./methods.md#tool-unresolve_pr_review_thread) · [list_pr_reviews](./methods.md#tool-list_pr_reviews) · [list_pr_commits](./methods.md#tool-list_pr_commits) · [list_pr_files](./methods.md#tool-list_pr_files) · [get_pr_diff](./methods.md#tool-get_pr_diff) · [get_pr_patch](./methods.md#tool-get_pr_patch)
+- Workflows (CI): [list_workflows](./methods.md#tool-list_workflows) · [list_workflow_runs](./methods.md#tool-list_workflow_runs) · [get_workflow_run](./methods.md#tool-get_workflow_run) · [list_workflow_jobs](./methods.md#tool-list_workflow_jobs) · [get_workflow_job_logs](./methods.md#tool-get_workflow_job_logs) · [rerun_workflow_run](./methods.md#tool-rerun_workflow_run) · [rerun_workflow_run_failed](./methods.md#tool-rerun_workflow_run_failed) · [cancel_workflow_run](./methods.md#tool-cancel_workflow_run)
+- Secrets/Vars/Environments: [list_repo_secrets](./methods.md#tool-list_repo_secrets) · [list_repo_variables](./methods.md#tool-list_repo_variables) · [list_environments](./methods.md#tool-list_environments) · [list_environment_variables](./methods.md#tool-list_environment_variables)
 
 Guiding Principles
 - Keep payloads lean: avoid include_* flags unless needed (e.g., include_location for review comments; include_patch for files).
@@ -27,17 +27,17 @@ Scenario A — Review a new PR
   - Why: overall_state + failing context names.
 
 3) Understand surface area
-- [list_pr_files_light](./methods.md#tool-list_pr_files_light) (per_page up to 100; include_patch=false)
+- [list_pr_files](./methods.md#tool-list_pr_files) (per_page up to 100; include_patch=false)
   - Why: filenames, status, additions/deletions/changes. Add include_patch only for targeted files if needed.
 
 4) Skim commit history
-- [list_pr_commits_light](./methods.md#tool-list_pr_commits_light)
+- [list_pr_commits](./methods.md#tool-list_pr_commits)
   - Why: commit oids, headlines, authored_at.
 
 5) See prior feedback
-- Reviews summary: [list_pr_reviews_light](./methods.md#tool-list_pr_reviews_light)
-- Inline code comments: [list_pr_review_comments_plain](./methods.md#tool-list_pr_review_comments_plain) (include_location=true for file/line mapping)
-- Discussion comments: [list_pr_comments_plain](./methods.md#tool-list_pr_comments_plain)
+- Reviews summary: [list_pr_reviews](./methods.md#tool-list_pr_reviews)
+- Inline code comments: [list_pr_review_comments](./methods.md#tool-list_pr_review_comments) (include_location=true for file/line mapping)
+– Discussion comments: [list_pr_comments](./methods.md#tool-list_pr_comments)
 
 6) Deep dive (only if necessary)
 - Unified diff: [get_pr_diff](./methods.md#tool-get_pr_diff)
@@ -51,16 +51,16 @@ Tips
 
 Scenario B — A reviewer pinged me to look at their review
 1) Locate the review
-- [list_pr_reviews_light](./methods.md#tool-list_pr_reviews_light)
+- [list_pr_reviews](./methods.md#tool-list_pr_reviews)
   - Find reviewer by author_login, inspect state/timestamp.
 
 2) Pull their comments with code context
-- [list_pr_review_comments_plain](./methods.md#tool-list_pr_review_comments_plain) (include_location=true)
+- [list_pr_review_comments](./methods.md#tool-list_pr_review_comments) (include_location=true)
   - Filter client-side by author_login to focus on that reviewer.
   - Use path + line/start_line + side to jump to code.
 
 3) Inspect affected files (optional)
-- [list_pr_files_light](./methods.md#tool-list_pr_files_light) (include_patch=false)
+- [list_pr_files](./methods.md#tool-list_pr_files) (include_patch=false)
 - If you need diffs: [get_pr_patch](./methods.md#tool-get_pr_patch) or [get_pr_diff](./methods.md#tool-get_pr_diff)
 
 ---
@@ -70,12 +70,12 @@ Scenario C — CI checks failed on the PR
 - [get_pr_status_summary](./methods.md#tool-get_pr_status_summary) (include_failing_contexts=true)
 
 2) Find the failing workflow run(s)
-- If you know the workflow: [list_workflow_runs_light](./methods.md#tool-list_workflow_runs_light) (filter by branch/event/head_sha)
-- If you don’t know the workflow: list workflows first → [list_workflows_light](./methods.md#tool-list_workflows_light), then choose the CI workflow and call list_workflow_runs_light.
-  - Tip: Get the PR’s head_sha from [get_pull_request](./methods.md#tool-get_pull_request) and pass as a filter to list_workflow_runs_light.
+- If you know the workflow: [list_workflow_runs](./methods.md#tool-list_workflow_runs) (filter by branch/event/head_sha)
+- If you don’t know the workflow: list workflows first → [list_workflows](./methods.md#tool-list_workflows), then choose the CI workflow and call list_workflow_runs.
+  - Tip: Get the PR’s head_sha from [get_pull_request](./methods.md#tool-get_pull_request) and pass as a filter to list_workflow_runs.
 
 3) Drill into failing jobs
-- [list_workflow_jobs_light](./methods.md#tool-list_workflow_jobs_light)
+- [list_workflow_jobs](./methods.md#tool-list_workflow_jobs)
   - Identify failed jobs via status/conclusion.
 
 4) Read only what you need
@@ -92,14 +92,14 @@ Scenario C — CI checks failed on the PR
 Scenario D — Quick PR triage in chat
 - [get_pull_request](./methods.md#tool-get_pull_request)
 - [get_pr_status_summary](./methods.md#tool-get_pr_status_summary)
-- [list_pr_files_light](./methods.md#tool-list_pr_files_light)
-- [list_pr_comments_plain](./methods.md#tool-list_pr_comments_plain)
+- [list_pr_files](./methods.md#tool-list_pr_files)
+- [list_pr_comments](./methods.md#tool-list_pr_comments)
 
 ---
 
 Scenario E — Resolve review comments after implementation
 1) List unresolved threads to verify scope
-- [list_pr_review_threads_light](./methods.md#tool-list_pr_review_threads_light)
+- [list_pr_review_threads](./methods.md#tool-list_pr_review_threads)
   - Why: get thread ids, resolved state, and optional file/line to jump to code. Filter client-side where is_resolved=false.
 
 2) Resolve threads that are addressed
@@ -107,7 +107,7 @@ Scenario E — Resolve review comments after implementation
   - Input: thread_id from step 1. Mutations are idempotent; resolving an already-resolved thread returns is_resolved=true.
 
 3) Recheck remaining threads
-- [list_pr_review_threads_light](./methods.md#tool-list_pr_review_threads_light)
+- [list_pr_review_threads](./methods.md#tool-list_pr_review_threads)
   - Why: confirm is_resolved now true. Paginate if needed via meta.next_cursor.
 
 4) Undo if needed (optional)
