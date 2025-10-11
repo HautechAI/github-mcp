@@ -1215,6 +1215,8 @@ pub struct ListTagsInput {
     pub repo: String,
     pub cursor: Option<String>,
     pub limit: Option<u32>,
+    // Currently unused until we return tag object details; kept for API parity
+    #[allow(dead_code)]
     pub include_object: Option<bool>,
 }
 #[derive(Debug, Serialize)]

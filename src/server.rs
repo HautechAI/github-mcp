@@ -3170,8 +3170,7 @@ fn handle_list_commits(id: Option<Id>, params: Value) -> Response {
         let next_cursor = if has_more {
             Some(http::encode_rest_cursor(http::RestCursor {
                 page: cur
-                    .map(|c| http::decode_rest_cursor(&c))
-                    .flatten()
+                    .and_then(|c| http::decode_rest_cursor(&c))
                     .map(|c| c.page)
                     .unwrap_or(page)
                     + 1,
@@ -4506,9 +4505,7 @@ fn handle_update_issue(id: Option<Id>, params: Value) -> Response {
         error: err,
     };
     let structured = serde_json::to_value(&out).unwrap();
-    let text = structured
-        .get("item")
-        .and_then(|_| Some("issue updated".to_string()));
+    let text = structured.get("item").map(|_| "issue updated".to_string());
     let is_error = structured
         .get("error")
         .map(|e| !e.is_null())
