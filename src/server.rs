@@ -2623,6 +2623,7 @@ fn handle_list_pr_files(id: Option<Id>, params: Value) -> Response {
                 owner: String,
                 repo: String,
                 number: i64,
+                #[allow(dead_code)]
                 cursor: Option<String>,
                 limit: Option<u32>,
                 include_patch: Option<bool>,
@@ -2679,6 +2680,7 @@ fn handle_list_pr_files(id: Option<Id>, params: Value) -> Response {
             deletions: i64,
             changes: i64,
             sha: String,
+            #[allow(dead_code)]
             patch: Option<String>,
         }
         let resp = http::rest_get_json::<Vec<File>>(&client, &cfg, &path).await;
@@ -2912,6 +2914,7 @@ fn handle_pr_summary(id: Option<Id>, params: Value) -> Response {
                 deletions: i64,
                 changes: i64,
                 sha: String,
+                #[allow(dead_code)]
                 patch: Option<String>,
             }
             let resp = http::rest_get_json::<Vec<File>>(&client, &cfg, &files_path).await;
@@ -2949,6 +2952,7 @@ fn handle_pr_summary(id: Option<Id>, params: Value) -> Response {
             }
             #[derive(Deserialize)]
             struct CheckRuns {
+                #[allow(dead_code)]
                 total_count: i64,
                 check_runs: Vec<CheckRun>,
             }
@@ -3087,7 +3091,9 @@ fn handle_list_commits(id: Option<Id>, params: Value) -> Response {
         }
         #[derive(Deserialize)]
         struct CommitUser {
+            #[allow(dead_code)]
             name: Option<String>,
+            #[allow(dead_code)]
             email: Option<String>,
             date: Option<String>,
         }
@@ -3102,11 +3108,13 @@ fn handle_list_commits(id: Option<Id>, params: Value) -> Response {
             commit: CommitObj,
             author: Option<User>,
             committer: Option<User>,
+            #[allow(dead_code)]
             parents: Option<Vec<Parent>>,
             stats: Option<Stats>,
         }
         #[derive(Deserialize)]
         struct Parent {
+            #[allow(dead_code)]
             sha: String,
         }
         #[derive(Deserialize)]
@@ -3247,7 +3255,9 @@ fn handle_get_commit(id: Option<Id>, params: Value) -> Response {
         }
         #[derive(Deserialize)]
         struct CommitUser {
+            #[allow(dead_code)]
             name: Option<String>,
+            #[allow(dead_code)]
             email: Option<String>,
             date: Option<String>,
         }
@@ -3415,6 +3425,7 @@ fn handle_list_tags(id: Option<Id>, params: Value) -> Response {
         #[derive(Deserialize)]
         struct CommitRef {
             sha: String,
+            #[allow(dead_code)]
             url: String,
         }
         let resp = http::rest_get_json::<Vec<Tag>>(&client, &cfg, &path).await;
@@ -4062,6 +4073,7 @@ fn handle_list_starred_repositories(id: Option<Id>, params: Value) -> Response {
         );
         #[derive(Deserialize)]
         struct Owner {
+            #[allow(dead_code)]
             login: String,
         }
         #[derive(Deserialize)]
@@ -4072,6 +4084,7 @@ fn handle_list_starred_repositories(id: Option<Id>, params: Value) -> Response {
             language: Option<String>,
             stargazers_count: i64,
             html_url: String,
+            #[allow(dead_code)]
             owner: Owner,
         }
         #[derive(Deserialize)]
@@ -4125,7 +4138,7 @@ fn handle_list_starred_repositories(id: Option<Id>, params: Value) -> Response {
             } else {
                 None
             };
-            return (
+            (
                 items,
                 Meta {
                     next_cursor,
@@ -4133,7 +4146,7 @@ fn handle_list_starred_repositories(id: Option<Id>, params: Value) -> Response {
                     rate: resp.meta.rate,
                 },
                 None,
-            );
+            )
         } else {
             let resp = http::rest_get_json::<Vec<Repo>>(&client, &cfg, &path).await;
             if let Some(err) = resp.error {
@@ -4178,7 +4191,7 @@ fn handle_list_starred_repositories(id: Option<Id>, params: Value) -> Response {
             } else {
                 None
             };
-            return (
+            (
                 items,
                 Meta {
                     next_cursor,
@@ -4186,7 +4199,7 @@ fn handle_list_starred_repositories(id: Option<Id>, params: Value) -> Response {
                     rate: resp.meta.rate,
                 },
                 None,
-            );
+            )
         }
     });
     let out = ListStarredReposOutput {
@@ -4350,7 +4363,7 @@ fn handle_search_common(id: Option<Id>, index: &str, input: SearchInput, limit: 
         let mut path = format!("/search/{}?per_page={}&page={}&q={}", index, per_page, page, urlencoding::encode(&input.q));
         if let Some(s) = input.sort { path.push_str(&format!("&sort={}", s)); }
         if let Some(o) = input.order { path.push_str(&format!("&order={}", o)); }
-        #[derive(Deserialize)] struct RateMetaOnly { remaining: Option<i32>, used: Option<i32>, reset_at: Option<String> }
+        // removed unused RateMetaOnly struct per clippy
         if index == "repositories" {
             #[derive(Deserialize)] struct RepoItem { full_name: String, private: bool, description: Option<String>, language: Option<String>, stargazers_count: i64, forks_count: i64, open_issues_count: i64, html_url: String }
             #[derive(Deserialize)] struct Resp { total_count: i64, incomplete_results: bool, items: Vec<RepoItem> }
@@ -4362,7 +4375,7 @@ fn handle_search_common(id: Option<Id>, index: &str, input: SearchInput, limit: 
             let items = val.items.into_iter().map(|r| SearchRepoItem{ full_name: r.full_name, private: r.private, description: r.description, language: r.language, stargazers_count: r.stargazers_count, forks_count: r.forks_count, open_issues_count: r.open_issues_count, html_url: r.html_url }).collect::<Vec<_>>();
             let out = SearchReposOutput{ items: Some(items), total_count: val.total_count, incomplete_results: val.incomplete_results, meta: Meta{ next_cursor, has_more, rate: resp.meta.rate }, error: None };
             let val = serde_json::to_value(out).unwrap();
-            return (val, Some("search repositories".into()), false)
+            (val, Some("search repositories".into()), false)
         } else {
             #[derive(Deserialize)] struct User { login: String }
             #[derive(Deserialize)] struct IssueItem { id: i64, number: i64, title: String, state: String, repository_url: String, user: Option<User>, created_at: String, updated_at: String, pull_request: Option<serde_json::Value> }
@@ -4375,7 +4388,7 @@ fn handle_search_common(id: Option<Id>, index: &str, input: SearchInput, limit: 
             let items = val.items.iter().map(|it| SearchIssueItem{ id: it.id, number: it.number, title: it.title.clone(), state: it.state.clone(), repo_full_name: it.repository_url.split("/repos/").nth(1).unwrap_or("").to_string(), is_pull_request: it.pull_request.is_some(), author_login: it.user.as_ref().map(|u| u.login.clone()), created_at: it.created_at.clone(), updated_at: it.updated_at.clone() }).collect::<Vec<_>>();
             let out = SearchIssuesOutput{ items: Some(items), total_count: val.total_count, incomplete_results: val.incomplete_results, meta: Meta{ next_cursor, has_more, rate: resp.meta.rate }, error: None };
             let val = serde_json::to_value(out).unwrap();
-            return (val, Some("search issues".into()), false)
+            (val, Some("search issues".into()), false)
         }
     });
     let wrapped = mcp_wrap(out_val, text, is_err);
