@@ -174,6 +174,34 @@ if ! session_call "tools/list" "{}" RESP; then session_stop; exit 1; fi
 printf '%s' "$RESP" | save_json "$ROOT_DIR/out-tools.json"
 assert_has_field "$ROOT_DIR/out-tools.json" "Array.isArray(o.tools)?o.tools.length:o.length"
 
+# Cache tool names for conditional execution
+TOOLS_JSON="$ROOT_DIR/out-tools.json"
+has_tool() {
+  local name="$1"
+  NAME="$name" node - "$TOOLS_JSON" <<'NODE'
+const fs=require('fs');
+const name=process.env.NAME;
+let raw=fs.readFileSync(process.argv[2],'utf8');
+let obj=JSON.parse(raw);
+let tools = Array.isArray(obj?.result?.tools) ? obj.result.tools
+          : Array.isArray(obj?.tools) ? obj.tools
+          : Array.isArray(obj) ? obj
+          : [];
+let ok = tools.some(t=>t && (t.name===name));
+process.exit(ok?0:1);
+NODE
+}
+
+tool_call_if_available() {
+  local name="$1"; shift
+  local args_json="$1"; shift || true
+  if has_tool "$name"; then
+    tool_call "$name" "${args_json:-{}}"
+  else
+    echo "[e2e] tool not available; skip: $name" | tee -a "$LOG" >&2
+  fi
+}
+
 # Optional: verify handshake was observed in diag log (non-fatal)
 if [ -f "$MCP_DIAG_LOG" ]; then
   if grep -qi "initialize" "$MCP_DIAG_LOG"; then
@@ -259,6 +287,62 @@ assert_has_field "$ROOT_DIR/out-get_pr_diff.json" "(o.structuredContent?.diff||'
 tool_call get_pr_patch "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM}"
 assert_has_field "$ROOT_DIR/out-get_pr_patch.json" "(o.structuredContent?.patch||'').length" || echo "[e2e] get_pr_patch may be empty; proceeding" | tee -a "$LOG" >&2
 
+# Additional read-only coverage (best-effort; conditional on tool availability)
+# pr_summary
+tool_call_if_available pr_summary "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM}"
+
+# Repository commits/tags/branches/releases
+BRANCH=${E2E_BRANCH:-"main"}
+tool_call_if_available list_commits "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"limit\":10,\"branch\":\"$BRANCH\"}"
+
+# Derive a commit sha for get_commit if available from PR commits
+COMMIT_SHA=$(node - "$ROOT_DIR/out-list_pr_commits_light.json" <<'NODE'
+const fs=require('fs');
+try{const o=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));const r=o?.result??o;const arr=r?.structuredContent?.items||[];const sha=arr[0]?.sha;process.stdout.write(sha||'');}catch{process.stdout.write('');}
+NODE
+)
+if [ -n "$COMMIT_SHA" ]; then
+  tool_call_if_available get_commit "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"sha\":\"$COMMIT_SHA\"}"
+else
+  echo "[e2e] skip get_commit (no sha)" | tee -a "$LOG" >&2
+fi
+
+tool_call_if_available list_tags "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"limit\":10}"
+if has_tool list_tags && [ -f "$ROOT_DIR/out-list_tags.json" ]; then
+  TAG_NAME=$(node - "$ROOT_DIR/out-list_tags.json" <<'NODE'
+const fs=require('fs');
+try{const o=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));const r=o?.result??o;const arr=r?.structuredContent?.items||[];const name=arr[0]?.name;process.stdout.write(name||'');}catch{process.stdout.write('');}
+NODE
+)
+  if [ -n "$TAG_NAME" ]; then
+    tool_call_if_available get_tag "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"name\":\"$TAG_NAME\"}"
+  else
+    echo "[e2e] skip get_tag (no tag)" | tee -a "$LOG" >&2
+  fi
+fi
+
+tool_call_if_available list_branches "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"limit\":10}"
+
+tool_call_if_available list_releases "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"limit\":10}"
+if has_tool list_releases && [ -f "$ROOT_DIR/out-list_releases.json" ]; then
+  REL_ID=$(node - "$ROOT_DIR/out-list_releases.json" <<'NODE'
+const fs=require('fs');
+try{const o=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));const r=o?.result??o;const arr=r?.structuredContent?.items||[];const id=arr[0]?.id;process.stdout.write(String(id||''));}catch{process.stdout.write('');}
+NODE
+)
+  if [ -n "$REL_ID" ]; then
+    tool_call_if_available get_release "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"id\":$REL_ID}"
+  else
+    echo "[e2e] skip get_release (no release)" | tee -a "$LOG" >&2
+  fi
+fi
+
+# Stars and search
+tool_call_if_available list_starred_repositories "{\"limit\":5}"
+tool_call_if_available search_issues "{\"q\":\"repo:$OWNER/$REPO is:issue\",\"limit\":5}"
+tool_call_if_available search_pull_requests "{\"q\":\"repo:$OWNER/$REPO is:pr\",\"limit\":5}"
+tool_call_if_available search_repositories "{\"q\":\"$REPO\",\"limit\":5}"
+
 # Actions (REST)
 tool_call list_workflows_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"per_page\":50,\"page\":1}"
 assert_has_field "$ROOT_DIR/out-list_workflows_light.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0" || echo "[e2e] no workflows listed; proceeding" | tee -a "$LOG" >&2
@@ -332,6 +416,64 @@ NODE
     [ -n "${resp:-}" ] && printf '%s' "$resp" | save_json "$ROOT_DIR/out-unresolve_pr_review_thread.json" || true
   else
     echo "[e2e] skip resolve/unresolve (no thread)" | tee -a "$LOG" >&2
+  fi
+fi
+
+# Additional gated mutations (best-effort; only when tools exist)
+if [ "$ENABLE_MUTATIONS" = "true" ]; then
+  # update_issue: append marker then revert
+  if has_tool update_issue; then
+    CUR_BODY=$(node - "$ROOT_DIR/out-get_issue.json" <<'NODE'
+const fs=require('fs');
+try{const o=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));const r=o?.result??o;const b=r?.structuredContent?.item?.body||'';process.stdout.write(b);}catch{process.stdout.write('');}
+NODE
+)
+    MARK="\n[e2e] update_issue marker $(date -u +%s)"
+    ESCAPED=$(printf '%s' "$CUR_BODY$MARK" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.stringify(s)));")
+    tool_call_if_available update_issue "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$ISSUE_NUM,\"body\":$ESCAPED}"
+    # revert
+    ESC_ORIG=$(printf '%s' "$CUR_BODY" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.stringify(s)));")
+    tool_call_if_available update_issue "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$ISSUE_NUM,\"body\":$ESC_ORIG}"
+  else
+    echo "[e2e] skip update_issue (tool missing)" | tee -a "$LOG" >&2
+  fi
+
+  # update_pull_request: append then revert
+  if has_tool update_pull_request; then
+    CUR_PR_BODY=$(node - "$ROOT_DIR/out-get_pull_request.json" <<'NODE'
+const fs=require('fs');
+try{const o=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));const r=o?.result??o;const b=r?.structuredContent?.item?.body||'';process.stdout.write(b);}catch{process.stdout.write('');}
+NODE
+)
+    MARK="\n[e2e] update_pull_request marker $(date -u +%s)"
+    ESCAPED=$(printf '%s' "$CUR_PR_BODY$MARK" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.stringify(s)));")
+    tool_call_if_available update_pull_request "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"body\":$ESCAPED}"
+    ESC_ORIG=$(printf '%s' "$CUR_PR_BODY" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.stringify(s)));")
+    tool_call_if_available update_pull_request "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"body\":$ESC_ORIG}"
+  else
+    echo "[e2e] skip update_pull_request (tool missing)" | tee -a "$LOG" >&2
+  fi
+
+  # merge_pr: extra gate E2E_ALLOW_PR_MERGE=true
+  if [ "${E2E_ALLOW_PR_MERGE:-false}" = "true" ]; then
+    if has_tool merge_pr; then
+      tool_call merge_pr "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM}"
+    else
+      echo "[e2e] skip merge_pr (tool missing)" | tee -a "$LOG" >&2
+    fi
+  else
+    echo "[e2e] merge_pr disabled via E2E_ALLOW_PR_MERGE" | tee -a "$LOG" >&2
+  fi
+
+  # fork_repository: extra hard gate E2E_ENABLE_FORKS=true
+  if [ "${E2E_ENABLE_FORKS:-false}" = "true" ]; then
+    if has_tool fork_repository; then
+      tool_call fork_repository "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\"}"
+    else
+      echo "[e2e] skip fork_repository (tool missing)" | tee -a "$LOG" >&2
+    fi
+  else
+    echo "[e2e] fork_repository disabled via E2E_ENABLE_FORKS" | tee -a "$LOG" >&2
   fi
 fi
 
