@@ -1139,3 +1139,50 @@ Cross-cutting notes
   - Favor GraphQL statusCheckRollup for holistic state. Only expose minimal counts and optional failing contexts.
 - Diffs
   - Provide unified diff or patch as raw strings via REST Accept headers. Never embed file blobs or binary content.
+- request_reviewers
+  - Purpose: Request reviewers for a PR.
+  - Input: owner, repo, number, reviewers[], team_reviewers[].
+  - Output: { item: { ok }, meta.rate }
+  - API: REST POST /repos/{owner}/{repo}/pulls/{number}/requested_reviewers
+
+- add_pr_comment
+  - Purpose: Add an issue-style comment on a PR.
+  - Input: owner, repo, number, body.
+  - Output: { item: { id, body, created_at }, meta.rate }
+  - API: REST POST /repos/{owner}/{repo}/issues/{number}/comments
+
+- add_pr_review_comment_inline
+  - Purpose: Add review comment inline or in_reply_to.
+  - Input: owner, repo, number, body, in_reply_to?, commit_id?, path?, side?, line?, start_line?, start_side?
+  - Output: { item: { id, body, created_at }, meta.rate }
+  - API: REST POST /repos/{owner}/{repo}/pulls/{number}/comments
+
+- submit_pr_review
+  - Purpose: Submit a PR review (COMMENT|APPROVE|REQUEST_CHANGES).
+  - Input: owner, repo, number, event, body?
+  - Output: { item: { id, state }, meta.rate }
+  - API: REST POST /repos/{owner}/{repo}/pulls/{number}/reviews
+
+- mark_pull_request_ready_for_review
+  - Purpose: Convert draft PR to ready.
+  - Input: owner, repo, number.
+  - Output: { item: { id, is_draft }, meta.rate }
+  - API: GraphQL mutation markPullRequestReadyForReview
+
+- convert_pull_request_to_draft
+  - Purpose: Convert PR to draft.
+  - Input: owner, repo, number.
+  - Output: { item: { id, is_draft }, meta.rate }
+  - API: GraphQL mutation convertPullRequestToDraft
+
+- merge_pull_request
+  - Purpose: Merge PR with optional expected_head_sha guard.
+  - Input: owner, repo, number, merge_method?, commit_title?, commit_message?, expected_head_sha?
+  - Output: { item: { merged, message, sha? }, meta.rate }
+  - API: REST PUT /repos/{owner}/{repo}/pulls/{number}/merge
+
+- update_pr_branch
+  - Purpose: Update PR branch from base.
+  - Input: owner, repo, number.
+  - Output: { item: { message }, meta.rate }
+  - API: REST PUT /repos/{owner}/{repo}/pulls/{number}/update-branch
