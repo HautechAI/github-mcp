@@ -631,6 +631,7 @@ pub struct GetIssueInput {
     pub number: i64,
     pub include_author: Option<bool>,
     // WIP: accept include=["body"] without changing behavior yet
+    #[allow(dead_code)] // field accepted in API but not yet used
     pub include: Option<Vec<String>>,
 }
 
@@ -724,6 +725,7 @@ pub struct GetPullRequestInput {
     pub number: i64,
     pub include_author: Option<bool>,
     // WIP: accept include=["body"] without changing behavior yet
+    #[allow(dead_code)] // field accepted in API but not yet used
     pub include: Option<Vec<String>>,
 }
 
