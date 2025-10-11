@@ -22,7 +22,7 @@ fn run_with_env(req: &serde_json::Value, envs: &[(&str, &str)]) -> anyhow::Resul
 }
 
 #[test]
-fn list_pr_comments_plain_happy() -> anyhow::Result<()> {
+fn list_pr_comments_happy() -> anyhow::Result<()> {
     let server = MockServer::start();
     let body = serde_json::json!({
       "data": {"repository": {"pullRequest": {"comments": {"nodes": [{"id":"IC_1","body":"hi","createdAt":"2025-01-01T00:00:00Z","updatedAt":"2025-01-01T00:00:00Z","author":{"login":"alice"}}],"pageInfo": {"hasNextPage": false, "endCursor": null}} }}}
@@ -33,7 +33,7 @@ fn list_pr_comments_plain_happy() -> anyhow::Result<()> {
     });
     let req = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":1,
-        "params":{"name":"list_pr_comments_plain","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":true}}
+        "params":{"name":"list_pr_comments","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":true}}
     });
     let out = run_with_env(
         &req,
@@ -63,7 +63,7 @@ fn list_pr_comments_plain_happy() -> anyhow::Result<()> {
 }
 
 #[test]
-fn list_pr_review_threads_light_include_location_and_empty() -> anyhow::Result<()> {
+fn list_pr_review_threads_include_location_and_empty() -> anyhow::Result<()> {
     // include_location true/false and empty threads
     let server = MockServer::start();
     // Empty threads response
@@ -86,7 +86,7 @@ fn list_pr_review_threads_light_include_location_and_empty() -> anyhow::Result<(
     });
     let req1 = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":1,
-        "params":{"name":"list_pr_review_threads_light","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":true,"include_location":true}}
+        "params":{"name":"list_pr_review_threads","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":true,"include_location":true}}
     });
     let out1 = run_with_env(
         &req1,
@@ -109,7 +109,7 @@ fn list_pr_review_threads_light_include_location_and_empty() -> anyhow::Result<(
     });
     let req2 = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":2,
-        "params":{"name":"list_pr_review_threads_light","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":false,"include_location":false}}
+        "params":{"name":"list_pr_review_threads","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":false,"include_location":false}}
     });
     let out2 = run_with_env(
         &req2,
@@ -128,7 +128,7 @@ fn list_pr_review_threads_light_include_location_and_empty() -> anyhow::Result<(
 }
 
 #[test]
-fn list_pr_review_comments_plain_include_location_and_empty() -> anyhow::Result<()> {
+fn list_pr_review_comments_include_location_and_empty() -> anyhow::Result<()> {
     let server = MockServer::start();
     // REST: empty array for review comments
     let _m1 = server.mock(|when, then| {
@@ -141,7 +141,7 @@ fn list_pr_review_comments_plain_include_location_and_empty() -> anyhow::Result<
     });
     let req1 = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":1,
-        "params":{"name":"list_pr_review_comments_plain","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":true,"include_location":true}}
+        "params":{"name":"list_pr_review_comments","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":true,"include_location":true}}
     });
     let out1 = run_with_env(
         &req1,
@@ -160,7 +160,7 @@ fn list_pr_review_comments_plain_include_location_and_empty() -> anyhow::Result<
     });
     let req2 = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":2,
-        "params":{"name":"list_pr_review_comments_plain","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":false,"include_location":false}}
+        "params":{"name":"list_pr_review_comments","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":false,"include_location":false}}
     });
     let out2 = run_with_env(
         &req2,
@@ -175,7 +175,7 @@ fn list_pr_review_comments_plain_include_location_and_empty() -> anyhow::Result<
 }
 
 #[test]
-fn list_pr_review_comments_plain_pagination_and_flags() -> anyhow::Result<()> {
+fn list_pr_review_comments_pagination_and_flags() -> anyhow::Result<()> {
     let server = MockServer::start();
     // Page 1: two comments, Link header indicates next page
     let _m1 = server.mock(|when, then| {
@@ -191,7 +191,7 @@ fn list_pr_review_comments_plain_pagination_and_flags() -> anyhow::Result<()> {
     });
     let req1 = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":1,
-        "params":{"name":"list_pr_review_comments_plain","arguments": {"owner":"o","repo":"r","number":1,"limit":2,"include_author":true,"include_location":true}}
+        "params":{"name":"list_pr_review_comments","arguments": {"owner":"o","repo":"r","number":1,"limit":2,"include_author":true,"include_location":true}}
     });
     let out1 = run_with_env(
         &req1,
@@ -225,7 +225,7 @@ fn list_pr_review_comments_plain_pagination_and_flags() -> anyhow::Result<()> {
     });
     let req2 = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":2,
-        "params":{"name":"list_pr_review_comments_plain","arguments": {"owner":"o","repo":"r","number":1,"cursor":cursor}}
+        "params":{"name":"list_pr_review_comments","arguments": {"owner":"o","repo":"r","number":1,"cursor":cursor}}
     });
     let out2 = run_with_env(
         &req2,

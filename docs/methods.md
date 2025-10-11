@@ -6,10 +6,10 @@ Design goals
 - Consistent error meta and pagination across tools.
 
 Tools Index
-- Issues: [list_issues](#tool-list_issues), [get_issue](#tool-get_issue), [list_issue_comments_plain](#tool-list_issue_comments_plain)
-- Pull Requests: [list_pull_requests](#tool-list_pull_requests), [get_pull_request](#tool-get_pull_request), [get_pr_status_summary](#tool-get_pr_status_summary), [list_pr_comments_plain](#tool-list_pr_comments_plain), [list_pr_review_comments_plain](#tool-list_pr_review_comments_plain), [list_pr_review_threads_light](#tool-list_pr_review_threads_light), [resolve_pr_review_thread](#tool-resolve_pr_review_thread), [unresolve_pr_review_thread](#tool-unresolve_pr_review_thread), [list_pr_reviews_light](#tool-list_pr_reviews_light), [list_pr_commits_light](#tool-list_pr_commits_light), [list_pr_files_light](#tool-list_pr_files_light), [get_pr_diff](#tool-get_pr_diff), [get_pr_patch](#tool-get_pr_patch)
-- Workflows: [list_workflows_light](#tool-list_workflows_light), [list_workflow_runs_light](#tool-list_workflow_runs_light), [get_workflow_run_light](#tool-get_workflow_run_light), [list_workflow_jobs_light](#tool-list_workflow_jobs_light), [get_workflow_job_logs](#tool-get_workflow_job_logs), [rerun_workflow_run](#tool-rerun_workflow_run), [rerun_workflow_run_failed](#tool-rerun_workflow_run_failed), [cancel_workflow_run](#tool-cancel_workflow_run)
-- Secrets/Variables/Environments: [list_repo_secrets_light](#tool-list_repo_secrets_light), [list_repo_variables_light](#tool-list_repo_variables_light), [list_environments_light](#tool-list_environments_light), [list_environment_variables_light](#tool-list_environment_variables_light)
+- Issues: [list_issues](#tool-list_issues), [get_issue](#tool-get_issue), [list_issue_comments](#tool-list_issue_comments)
+- Pull Requests: [list_pull_requests](#tool-list_pull_requests), [get_pull_request](#tool-get_pull_request), [get_pr_status_summary](#tool-get_pr_status_summary), [list_pr_comments](#tool-list_pr_comments), [list_pr_review_comments](#tool-list_pr_review_comments), [list_pr_review_threads](#tool-list_pr_review_threads), [resolve_pr_review_thread](#tool-resolve_pr_review_thread), [unresolve_pr_review_thread](#tool-unresolve_pr_review_thread), [list_pr_reviews](#tool-list_pr_reviews), [list_pr_commits](#tool-list_pr_commits), [list_pr_files](#tool-list_pr_files), [get_pr_diff](#tool-get_pr_diff), [get_pr_patch](#tool-get_pr_patch)
+- Workflows: [list_workflows](#tool-list_workflows), [list_workflow_runs](#tool-list_workflow_runs), [get_workflow_run](#tool-get_workflow_run), [list_workflow_jobs](#tool-list_workflow_jobs), [get_workflow_job_logs](#tool-get_workflow_job_logs), [rerun_workflow_run](#tool-rerun_workflow_run), [rerun_workflow_run_failed](#tool-rerun_workflow_run_failed), [cancel_workflow_run](#tool-cancel_workflow_run)
+- Secrets/Variables/Environments: [list_repo_secrets](#tool-list_repo_secrets), [list_repo_variables](#tool-list_repo_variables), [list_environments](#tool-list_environments), [list_environment_variables](#tool-list_environment_variables)
 
 Shared conventions
 - Pagination (inputs): cursor (string, optional), limit (int, default 30, max 100). For REST tools, server maps cursor to page/per_page.
@@ -159,7 +159,7 @@ query GetIssue($owner: String!, $repo: String!, $number: Int!) {
 }
 ```
 
-## Tool: list_issue_comments_plain
+## Tool: list_issue_comments
 Purpose: List issue comments (plain) with minimal fields.
 
 Inputs
@@ -358,7 +358,7 @@ query GetPrStatusSummary($owner: String!, $repo: String!, $number: Int!, $limit_
 
 - Notes: GraphQL returns a union of CheckRun and StatusContext. Map state/conclusion to SUCCESS/PENDING/FAILURE. failing_contexts derive from CheckRun.name or StatusContext.context where a failure is indicated.
 
-## Tool: list_pr_comments_plain
+## Tool: list_pr_comments
 Purpose: List PR issue comments (not code review comments).
 
 Inputs
@@ -401,7 +401,7 @@ query ListPrComments($owner: String!, $repo: String!, $number: Int!, $first: Int
 }
 ```
 
-## Tool: list_pr_review_comments_plain
+## Tool: list_pr_review_comments
 Purpose: List PR code review comments (inline comments) with minimal fields.
 
 Inputs
@@ -445,7 +445,7 @@ API
 - Accept: application/vnd.github+json
 - Notes: Link-based pagination; server returns opaque cursor via meta.next_cursor. When include_author=true, maps user.login to author_login. When include_location=true, maps REST fields path/line/start_line/side/start_side/original_line/original_start_line/diff_hunk/commit_id/original_commit_id to public fields; side values normalized to uppercase.
 
-## Tool: list_pr_review_threads_light
+## Tool: list_pr_review_threads
 Implementation note: GitHub GraphQL exposes thread location sides as diffSide/startDiffSide; server maps these to public side/start_side without changing the interface.
 Purpose: List PR review threads (grouped inline discussions) with minimal fields.
 
@@ -573,7 +573,7 @@ mutation UnresolvePrReviewThread($thread_id: ID!) {
 }
 ```
 
-## Tool: list_pr_reviews_light
+## Tool: list_pr_reviews
 Purpose: List PR review summaries.
 
 Inputs
@@ -615,7 +615,7 @@ query ListPrReviews($owner: String!, $repo: String!, $number: Int!, $first: Int 
 }
 ```
 
-## Tool: list_pr_commits_light
+## Tool: list_pr_commits
 Purpose: List commits of a PR with minimal fields.
 
 Inputs
@@ -659,7 +659,7 @@ query ListPrCommits($owner: String!, $repo: String!, $number: Int!, $first: Int 
 }
 ```
 
-## Tool: list_pr_files_light
+## Tool: list_pr_files
 Purpose: List files changed in a PR with optional patch inclusion.
 
 Inputs
@@ -748,7 +748,7 @@ API
 
 WORKFLOWS (GitHub Actions)
 
-## Tool: list_workflows_light
+## Tool: list_workflows
 Purpose: List workflows for a repository.
 
 Inputs
@@ -780,7 +780,7 @@ API
 
 SECRETS / VARIABLES / ENVIRONMENTS (GitHub Actions)
 
-## Tool: list_repo_secrets_light
+## Tool: list_repo_secrets
 Purpose: List repository Actions secrets (metadata only). Never exposes secret values.
 
 Inputs
@@ -810,7 +810,7 @@ API
 - Accept: application/vnd.github+json
 - Notes: Include header `X-GitHub-Api-Version: 2022-11-28`. Do not include any secret values; GitHub does not return them for list.
 
-## Tool: list_repo_variables_light
+## Tool: list_repo_variables
 Purpose: List repository Actions variables (may include value as returned by API).
 
 Inputs
@@ -841,7 +841,7 @@ API
 - Accept: application/vnd.github+json
 - Notes: Include header `X-GitHub-Api-Version: 2022-11-28`.
 
-## Tool: list_environments_light
+## Tool: list_environments
 Purpose: List repository environments.
 
 Inputs
@@ -870,7 +870,7 @@ API
 - Accept: application/vnd.github+json
 - Notes: Include header `X-GitHub-Api-Version: 2022-11-28`.
 
-## Tool: list_environment_variables_light
+## Tool: list_environment_variables
 Purpose: List environment-scoped Actions variables (may include values). The environment_name is URL-encoded in the path.
 
 Inputs
@@ -902,7 +902,7 @@ API
 - Accept: application/vnd.github+json
 - Notes: Include header `X-GitHub-Api-Version: 2022-11-28`. Server URL-encodes environment_name segment.
 
-## Tool: list_workflow_runs_light
+## Tool: list_workflow_runs
 Purpose: List workflow runs for a workflow id with minimal fields.
 
 Inputs
@@ -943,7 +943,7 @@ API
 - Accept: application/vnd.github+json
 - Notes: Include header `X-GitHub-Api-Version: 2022-11-28`.
 
-## Tool: get_workflow_run_light
+## Tool: get_workflow_run
 Purpose: Get a single workflow run with minimal fields.
 
 Inputs
@@ -977,7 +977,7 @@ API
 - Accept: application/vnd.github+json
 - Notes: Include header `X-GitHub-Api-Version: 2022-11-28`.
 
-## Tool: list_workflow_jobs_light
+## Tool: list_workflow_jobs
 Purpose: List jobs for a workflow run.
 
 Inputs

@@ -23,7 +23,7 @@ fn run_with_env(req: &serde_json::Value, envs: &[(&str, &str)]) -> anyhow::Resul
 
 #[test]
 fn mcp_envelope_success_and_error_and_ping_gating() -> anyhow::Result<()> {
-    // Success: mocked REST tool list_workflows_light 200
+    // Success: mocked REST tool list_workflows 200
     let server_ok = MockServer::start();
     let _m_ok = server_ok.mock(|when, then| {
         when.method(GET)
@@ -36,7 +36,7 @@ fn mcp_envelope_success_and_error_and_ping_gating() -> anyhow::Result<()> {
     });
     let ok_req = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":1,
-        "params":{"name":"list_workflows_light","arguments":{"owner":"o","repo":"r","per_page":10,"page":1}}
+        "params":{"name":"list_workflows","arguments":{"owner":"o","repo":"r","per_page":10,"page":1}}
     });
     let out_ok = run_with_env(
         &ok_req,
@@ -49,7 +49,7 @@ fn mcp_envelope_success_and_error_and_ping_gating() -> anyhow::Result<()> {
     assert!(out_ok.contains("\"structuredContent\""));
     assert!(!out_ok.contains("\"isError\":true"));
 
-    // Error path: list_workflows_light with 404 from REST
+    // Error path: list_workflows with 404 from REST
     let server_err = MockServer::start();
     let _m_err = server_err.mock(|when, then| {
         when.method(GET).path("/repos/o/r/actions/workflows");
@@ -57,7 +57,7 @@ fn mcp_envelope_success_and_error_and_ping_gating() -> anyhow::Result<()> {
     });
     let err_req = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":2,
-        "params":{"name":"list_workflows_light","arguments":{"owner":"o","repo":"r","per_page":10,"page":1}}
+        "params":{"name":"list_workflows","arguments":{"owner":"o","repo":"r","per_page":10,"page":1}}
     });
     let out_err = run_with_env(
         &err_req,

@@ -212,8 +212,8 @@ assert_has_field "$ROOT_DIR/out-list_issues.json" "Array.isArray(o.structuredCon
 tool_call get_issue "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$ISSUE_NUM,\"include_author\":true}"
 assert_has_field "$ROOT_DIR/out-get_issue.json" "o.structuredContent?.item?.number"
 
-tool_call list_issue_comments_plain "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$ISSUE_NUM,\"limit\":10}"
-assert_has_field "$ROOT_DIR/out-list_issue_comments_plain.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0" || echo "[e2e] note: issue may have zero comments; proceeding" | tee -a "$LOG" >&2
+tool_call list_issue_comments "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$ISSUE_NUM,\"limit\":10}"
+assert_has_field "$ROOT_DIR/out-list_issue_comments.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0" || echo "[e2e] note: issue may have zero comments; proceeding" | tee -a "$LOG" >&2
 
 # Negative path: non-existent issue
 tool_call get_issue "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":999999}"
@@ -233,25 +233,25 @@ assert_is_error_code "$ROOT_DIR/out-get_pull_request.json" "not_found" || echo "
 tool_call get_pr_status_summary "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM}"
 assert_has_field "$ROOT_DIR/out-get_pr_status_summary.json" "(o.structuredContent?.item?.overall_state || o.structuredContent?.item?.counts)" || echo "[e2e] status summary may be empty; proceeding" | tee -a "$LOG" >&2
 
-tool_call list_pr_comments_plain "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":10}"
-assert_has_field "$ROOT_DIR/out-list_pr_comments_plain.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0" || echo "[e2e] note: PR may have zero comments; proceeding" | tee -a "$LOG" >&2
+tool_call list_pr_comments "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":10}"
+assert_has_field "$ROOT_DIR/out-list_pr_comments.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0" || echo "[e2e] note: PR may have zero comments; proceeding" | tee -a "$LOG" >&2
 
-tool_call list_pr_review_comments_plain "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":3}"
-assert_has_field "$ROOT_DIR/out-list_pr_review_comments_plain.json" "Array.isArray(o.structuredContent?.items)"
-tool_call list_pr_review_comments_plain "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":3,\"include_author\":true,\"include_location\":true}"
-assert_has_field "$ROOT_DIR/out-list_pr_review_comments_plain.json" "Array.isArray(o.structuredContent?.items)"
+tool_call list_pr_review_comments "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":3}"
+assert_has_field "$ROOT_DIR/out-list_pr_review_comments.json" "Array.isArray(o.structuredContent?.items)"
+tool_call list_pr_review_comments "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":3,\"include_author\":true,\"include_location\":true}"
+assert_has_field "$ROOT_DIR/out-list_pr_review_comments.json" "Array.isArray(o.structuredContent?.items)"
 
-tool_call list_pr_review_threads_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":10}"
-assert_has_field "$ROOT_DIR/out-list_pr_review_threads_light.json" "Array.isArray(o.structuredContent?.items)"
+tool_call list_pr_review_threads "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":10}"
+assert_has_field "$ROOT_DIR/out-list_pr_review_threads.json" "Array.isArray(o.structuredContent?.items)"
 
-tool_call list_pr_reviews_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":10}"
-assert_has_field "$ROOT_DIR/out-list_pr_reviews_light.json" "Array.isArray(o.structuredContent?.items)"
+tool_call list_pr_reviews "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":10}"
+assert_has_field "$ROOT_DIR/out-list_pr_reviews.json" "Array.isArray(o.structuredContent?.items)"
 
-tool_call list_pr_commits_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":10}"
-assert_has_field "$ROOT_DIR/out-list_pr_commits_light.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0"
+tool_call list_pr_commits "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"limit\":10}"
+assert_has_field "$ROOT_DIR/out-list_pr_commits.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0"
 
-tool_call list_pr_files_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"per_page\":50,\"page\":1,\"include_patch\":true}"
-assert_has_field "$ROOT_DIR/out-list_pr_files_light.json" "Array.isArray(o.structuredContent?.items)"
+tool_call list_pr_files "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM,\"per_page\":50,\"page\":1,\"include_patch\":true}"
+assert_has_field "$ROOT_DIR/out-list_pr_files.json" "Array.isArray(o.structuredContent?.items)"
 
 tool_call get_pr_diff "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_NUM}"
 assert_has_field "$ROOT_DIR/out-get_pr_diff.json" "(o.structuredContent?.diff||'').length" || echo "[e2e] get_pr_diff may be empty; proceeding" | tee -a "$LOG" >&2
@@ -260,14 +260,14 @@ tool_call get_pr_patch "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$PR_
 assert_has_field "$ROOT_DIR/out-get_pr_patch.json" "(o.structuredContent?.patch||'').length" || echo "[e2e] get_pr_patch may be empty; proceeding" | tee -a "$LOG" >&2
 
 # Actions (REST)
-tool_call list_workflows_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"per_page\":50,\"page\":1}"
-assert_has_field "$ROOT_DIR/out-list_workflows_light.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0" || echo "[e2e] no workflows listed; proceeding" | tee -a "$LOG" >&2
+tool_call list_workflows "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"per_page\":50,\"page\":1}"
+assert_has_field "$ROOT_DIR/out-list_workflows.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0" || echo "[e2e] no workflows listed; proceeding" | tee -a "$LOG" >&2
 
-tool_call list_workflow_runs_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"per_page\":25,\"page\":1}"
-assert_has_field "$ROOT_DIR/out-list_workflow_runs_light.json" "Array.isArray(o.structuredContent?.items)" || echo "[e2e] no workflow runs; proceeding" | tee -a "$LOG" >&2
+tool_call list_workflow_runs "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"per_page\":25,\"page\":1}"
+assert_has_field "$ROOT_DIR/out-list_workflow_runs.json" "Array.isArray(o.structuredContent?.items)" || echo "[e2e] no workflow runs; proceeding" | tee -a "$LOG" >&2
 
 # Try to pick the newest run id for further checks
-LATEST_RUN_ID=$(node - "$ROOT_DIR/out-list_workflow_runs_light.json" <<'NODE'
+LATEST_RUN_ID=$(node - "$ROOT_DIR/out-list_workflow_runs.json" <<'NODE'
 const fs=require('fs');
 try{
   const o=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
@@ -278,13 +278,13 @@ NODE
 )
 
 if [ -n "$LATEST_RUN_ID" ]; then
-  tool_call get_workflow_run_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID}"
-  assert_has_field "$ROOT_DIR/out-get_workflow_run_light.json" "o.structuredContent?.item?.id" || true
+  tool_call get_workflow_run "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID}"
+  assert_has_field "$ROOT_DIR/out-get_workflow_run.json" "o.structuredContent?.item?.id" || true
 
-  tool_call list_workflow_jobs_light "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID,\"per_page\":50,\"page\":1}"
-  assert_has_field "$ROOT_DIR/out-list_workflow_jobs_light.json" "Array.isArray(o.structuredContent?.items)" || true
+  tool_call list_workflow_jobs "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"run_id\":$LATEST_RUN_ID,\"per_page\":50,\"page\":1}"
+  assert_has_field "$ROOT_DIR/out-list_workflow_jobs.json" "Array.isArray(o.structuredContent?.items)" || true
 
-  JOB_ID=$(node - "$ROOT_DIR/out-list_workflow_jobs_light.json" <<'NODE'
+  JOB_ID=$(node - "$ROOT_DIR/out-list_workflow_jobs.json" <<'NODE'
 const fs=require('fs');
 try{
   const o=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
@@ -316,7 +316,7 @@ fi
 
 # Review thread resolve/unresolve are gated and require a thread id; we only attempt if non-empty.
 if [ "$ENABLE_MUTATIONS" = "true" ]; then
-  THREAD_ID=$(node - "$ROOT_DIR/out-list_pr_review_threads_light.json" <<'NODE'
+  THREAD_ID=$(node - "$ROOT_DIR/out-list_pr_review_threads.json" <<'NODE'
 const fs=require('fs');
 try{
   const o=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));

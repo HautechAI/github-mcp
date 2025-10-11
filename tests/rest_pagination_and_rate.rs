@@ -36,7 +36,7 @@ fn rest_pagination_link_headers() -> anyhow::Result<()> {
     });
     let req = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":1,
-        "params":{"name":"list_workflow_runs_light","arguments":{"owner":"o","repo":"r","per_page":30}}
+        "params":{"name":"list_workflow_runs","arguments":{"owner":"o","repo":"r","per_page":30}}
     });
     let out = run_with_env(
         &req,
@@ -60,7 +60,7 @@ fn rest_pagination_link_headers() -> anyhow::Result<()> {
     // With _include_rate=true: rate should appear in meta
     let req_inc = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":2,
-        "params":{"name":"list_workflow_runs_light","arguments":{"owner":"o","repo":"r","per_page":30,"_include_rate":true}}
+        "params":{"name":"list_workflow_runs","arguments":{"owner":"o","repo":"r","per_page":30,"_include_rate":true}}
     });
     let out_inc = run_with_env(
         &req_inc,
@@ -142,7 +142,7 @@ fn graphql_rate_limit_meta() -> anyhow::Result<()> {
 #[test]
 fn rest_non_paginated_meta_default_and_optin() -> anyhow::Result<()> {
     let server = MockServer::start();
-    // get_workflow_run_light returns non-paginated result
+    // get_workflow_run returns non-paginated result
     let _m = server.mock(|when, then| {
         when.method(GET).path("/repos/o/r/actions/runs/1");
         then.status(200)
@@ -162,7 +162,7 @@ fn rest_non_paginated_meta_default_and_optin() -> anyhow::Result<()> {
     });
     let req = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":1,
-        "params":{"name":"get_workflow_run_light","arguments":{"owner":"o","repo":"r","run_id":1}}
+        "params":{"name":"get_workflow_run","arguments":{"owner":"o","repo":"r","run_id":1}}
     });
     let out = run_with_env(
         &req,
@@ -185,7 +185,7 @@ fn rest_non_paginated_meta_default_and_optin() -> anyhow::Result<()> {
     // Opt-in rate
     let req2 = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":2,
-        "params":{"name":"get_workflow_run_light","arguments":{"owner":"o","repo":"r","run_id":1,"_include_rate":true}}
+        "params":{"name":"get_workflow_run","arguments":{"owner":"o","repo":"r","run_id":1,"_include_rate":true}}
     });
     let out2 = run_with_env(
         &req2,

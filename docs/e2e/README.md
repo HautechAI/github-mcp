@@ -23,10 +23,10 @@ Local run
 What it validates
 - initialize: protocolVersion present
 - tools/list: returns tool descriptors; includes list_issues/get_issue
-- Issues: list_issues, get_issue, list_issue_comments_plain
+- Issues: list_issues, get_issue, list_issue_comments
 - Negative path: get_issue not_found for a large number
-- PRs: list_pull_requests, get_pull_request, list_pr_comments_plain, list_pr_review_comments_plain, list_pr_review_threads_light, list_pr_reviews_light, list_pr_commits_light, list_pr_files_light, get_pr_diff, get_pr_patch, get_pr_status_summary
-- Actions: list_workflows_light, list_workflow_runs_light, get_workflow_run_light, list_workflow_jobs_light, get_workflow_job_logs (best effort)
+- PRs: list_pull_requests, get_pull_request, list_pr_comments, list_pr_review_comments, list_pr_review_threads, list_pr_reviews, list_pr_commits, list_pr_files, get_pr_diff, get_pr_patch, get_pr_status_summary
+- Actions: list_workflows, list_workflow_runs, get_workflow_run, list_workflow_jobs, get_workflow_job_logs (best effort)
 - Mutations (opt-in): rerun_workflow_run, rerun_workflow_run_failed, cancel_workflow_run, resolve_pr_review_thread, unresolve_pr_review_thread
 
 Graceful skips
@@ -42,9 +42,9 @@ CI integration
 Coverage map (tools)
 - initialize, tools/list — basic MCP handshake
 - ping — optional; gated by `GITHUB_MCP_ENABLE_PING` (default OFF). E2E does not rely on ping.
-- issues: list_issues, get_issue, list_issue_comments_plain
-- pull requests: list_pull_requests, get_pull_request, list_pr_comments_plain, list_pr_review_comments_plain, list_pr_review_threads_light, list_pr_reviews_light, list_pr_commits_light, list_pr_files_light, get_pr_diff, get_pr_patch, get_pr_status_summary
-- actions: list_workflows_light, list_workflow_runs_light, get_workflow_run_light, list_workflow_jobs_light, get_workflow_job_logs
+- issues: list_issues, get_issue, list_issue_comments
+- pull requests: list_pull_requests, get_pull_request, list_pr_comments, list_pr_review_comments, list_pr_review_threads, list_pr_reviews, list_pr_commits, list_pr_files, get_pr_diff, get_pr_patch, get_pr_status_summary
+- actions: list_workflows, list_workflow_runs, get_workflow_run, list_workflow_jobs, get_workflow_job_logs
 - mutations (opt-in): resolve_pr_review_thread, unresolve_pr_review_thread, rerun_workflow_run, rerun_workflow_run_failed, cancel_workflow_run
 
 Troubleshooting
