@@ -26,6 +26,11 @@ CI behavior
 - The E2E harness (`scripts/e2e_live.sh`) is also executed under Doppler in CI.
 - If Doppler or required env is missing, the job fails by design.
 
+- Forked PRs: steps requiring Doppler/secrets are skipped for `pull_request` events from forks (no secrets available). Example condition used in the workflow:
+  - `if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork }}`
+
+- Legacy switch: `LIVE_API_TESTS` is no longer supported and will be ignored if set.
+
 Notes
 - Live tests are read-only and should not mutate repositories. If you add new live tests, keep them read-only.
 - The E2E harness enforces Doppler and token presence and will fail fast if not provided.

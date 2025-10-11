@@ -15,10 +15,10 @@ set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 BIN_PATH=${BIN_PATH:-"$ROOT_DIR/target/release/github-mcp"}
-OWNER=${E2E_OWNER:-"HautechAI"}
-REPO=${E2E_REPO:-"github-mcp-test-repo"}
-ISSUE_NUM=${E2E_ISSUE_NUM:-10}
-PR_NUM=${E2E_PR_NUM:-9}
+OWNER=${E2E_OWNER:-""}
+REPO=${E2E_REPO:-""}
+ISSUE_NUM=${E2E_ISSUE_NUM:-}
+PR_NUM=${E2E_PR_NUM:-}
 WORKFLOW_FILE=${E2E_WORKFLOW_FILE:-".github/workflows/e2e-smoke.yml"}
 ENABLE_MUTATIONS=${E2E_ENABLE_MUTATIONS:-"false"}
 LOG=${E2E_LOG_PATH:-"$ROOT_DIR/mcp-e2e.log"}
@@ -26,7 +26,7 @@ export MCP_DIAG_LOG=${MCP_DIAG_LOG:-"$ROOT_DIR/mcp-diag.log"}
 
 echo "[e2e] github-mcp E2E starting" | tee "$LOG" >&2
 echo "[e2e] binary: $BIN_PATH" | tee -a "$LOG" >&2
-echo "[e2e] repo: $OWNER/$REPO issue #$ISSUE_NUM pr #$PR_NUM" | tee -a "$LOG" >&2
+echo "[e2e] repo: $OWNER/$REPO issue #${ISSUE_NUM:-unset} pr #${PR_NUM:-unset}" | tee -a "$LOG" >&2
 echo "[e2e] mutations enabled: $ENABLE_MUTATIONS" | tee -a "$LOG" >&2
 
 require_file() {
@@ -38,11 +38,12 @@ require_file() {
 
 require_tools() {
   command -v node >/dev/null 2>&1 || { echo "[e2e][fatal] node is required" | tee -a "$LOG" >&2; exit 1; }
+  command -v doppler >/dev/null 2>&1 || { echo "[e2e][fatal] doppler CLI is required (install via GH Action or https://docs.doppler.com/docs/install-cli)" | tee -a "$LOG" >&2; exit 1; }
 }
 
 require_auth() {
   # Enforce presence of Doppler environment context and GitHub token.
-  if ! env | grep -qE '^DOPPLER_(PROJECT|CONFIG|ENVIRONMENT)='; then
+  if [ -z "${DOPPLER_PROJECT:-}" ] && [ -z "${DOPPLER_CONFIG:-}" ] && [ -z "${DOPPLER_ENVIRONMENT:-}" ]; then
     echo "[e2e][fatal] Missing Doppler context. Run via: doppler run -p github-mcp -c dev -- bash ./scripts/e2e_live.sh" | tee -a "$LOG" >&2
     exit 1
   fi
@@ -50,6 +51,22 @@ require_auth() {
     echo "[e2e][fatal] Missing GITHUB_TOKEN/GH_TOKEN in environment (expected via Doppler)." | tee -a "$LOG" >&2
     echo "[e2e][hint] Example: doppler run -p github-mcp -c dev -- bash ./scripts/e2e_live.sh" | tee -a "$LOG" >&2
     exit 1
+  fi
+  # Require fixtures (owner/repo/issue)
+  if [ -z "${E2E_OWNER:-}" ] || [ -z "${E2E_REPO:-}" ] || [ -z "${E2E_ISSUE_NUM:-}" ]; then
+    echo "[e2e][fatal] Missing required fixtures E2E_OWNER/E2E_REPO/E2E_ISSUE_NUM." | tee -a "$LOG" >&2
+    echo "[e2e][hint] Example: doppler run -p github-mcp -c dev -- env E2E_OWNER=HautechAI E2E_REPO=github-mcp-test-repo E2E_ISSUE_NUM=10 bash ./scripts/e2e_live.sh" | tee -a "$LOG" >&2
+    exit 1
+  fi
+}
+
+# Optional: when mutations are enabled, ensure workflow file exists early
+require_workflow_when_mutations() {
+  if [ "${ENABLE_MUTATIONS}" = "true" ]; then
+    if [ ! -f "$ROOT_DIR/$WORKFLOW_FILE" ]; then
+      echo "[e2e][fatal] Workflow file not found: $WORKFLOW_FILE (required when E2E_ENABLE_MUTATIONS=true)" | tee -a "$LOG" >&2
+      exit 1
+    fi
   fi
 }
 
@@ -179,6 +196,7 @@ NODE
 require_file
 require_tools
 require_auth
+require_workflow_when_mutations
 
 session_start
 

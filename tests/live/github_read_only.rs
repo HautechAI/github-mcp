@@ -1,6 +1,9 @@
 use assert_cmd::Command;
 use std::io::Write;
 
+const EXAMPLE_DOPPLER_CMD: &str =
+    "doppler run -p github-mcp -c dev -- env E2E_OWNER=... E2E_REPO=... E2E_ISSUE_NUM=... cargo test -- --ignored";
+
 fn run(req: &serde_json::Value) -> anyhow::Result<String> {
     let mut cmd = Command::cargo_bin("github-mcp")?;
     let input = serde_json::to_string(req)?;
@@ -27,18 +30,12 @@ fn ensure_prereqs(base_msg: &str) {
         .into_iter()
         .any(|k| env_var(k).is_some());
     if !in_doppler {
-        panic!(
-            "{} Missing Doppler context. Run via: doppler run -p github-mcp -c dev -- env E2E_OWNER=... E2E_REPO=... E2E_ISSUE_NUM=... cargo test -- --ignored",
-            base_msg
-        );
+        panic!("{} Missing Doppler context. Run via: {}", base_msg, EXAMPLE_DOPPLER_CMD);
     }
 
     // Require GitHub token in environment.
     if env_var("GITHUB_TOKEN").is_none() && env_var("GH_TOKEN").is_none() {
-        panic!(
-            "{} Missing GITHUB_TOKEN/GH_TOKEN. Use Doppler or export a token before running ignored live tests.",
-            base_msg
-        );
+        panic!("{} Missing GITHUB_TOKEN/GH_TOKEN. Use Doppler or export a token before running ignored live tests.", base_msg);
     }
 }
 
@@ -47,10 +44,12 @@ fn ensure_prereqs(base_msg: &str) {
 fn live_list_issues_basic() -> anyhow::Result<()> {
     ensure_prereqs("[live_list_issues_basic]");
     let owner = env_var("E2E_OWNER").unwrap_or_else(|| panic!(
-        "[live_list_issues_basic] E2E_OWNER is required. Example: doppler run -p github-mcp -c dev -- env E2E_OWNER=HautechAI E2E_REPO=github-mcp-test-repo cargo test -- --ignored"
+        "[live_list_issues_basic] E2E_OWNER is required. Example: {}",
+        EXAMPLE_DOPPLER_CMD
     ));
     let repo = env_var("E2E_REPO").unwrap_or_else(|| panic!(
-        "[live_list_issues_basic] E2E_REPO is required. Example: doppler run -p github-mcp -c dev -- env E2E_OWNER=HautechAI E2E_REPO=github-mcp-test-repo cargo test -- --ignored"
+        "[live_list_issues_basic] E2E_REPO is required. Example: {}",
+        EXAMPLE_DOPPLER_CMD
     ));
 
     let req = serde_json::json!({
@@ -70,10 +69,12 @@ fn live_list_issues_basic() -> anyhow::Result<()> {
 fn live_get_issue_if_fixture_provided() -> anyhow::Result<()> {
     ensure_prereqs("[live_get_issue_if_fixture_provided]");
     let owner = env_var("E2E_OWNER").unwrap_or_else(|| panic!(
-        "[live_get_issue_if_fixture_provided] E2E_OWNER is required."
+        "[live_get_issue_if_fixture_provided] E2E_OWNER is required. Example: {}",
+        EXAMPLE_DOPPLER_CMD
     ));
     let repo = env_var("E2E_REPO").unwrap_or_else(|| panic!(
-        "[live_get_issue_if_fixture_provided] E2E_REPO is required."
+        "[live_get_issue_if_fixture_provided] E2E_REPO is required. Example: {}",
+        EXAMPLE_DOPPLER_CMD
     ));
     let number = env_var("E2E_ISSUE_NUM")
         .and_then(|s| s.parse::<u64>().ok())
