@@ -4761,7 +4761,7 @@ fn handle_mark_pr_ready_for_review(id: Option<Id>, params: Value) -> Response {
         let q = r#"
         query GetPrId($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { id isDraft } } rateLimit { remaining used resetAt } }
         "#;
-        #[derive(Deserialize)] struct PR { id: String, isDraft: bool }
+        #[derive(Deserialize)] struct PR { id: String, _isDraft: bool }
         #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
         #[derive(Deserialize)] struct Data { repository: Option<Repo> }
         let vars = serde_json::json!({"owner": input.owner, "repo": input.repo, "number": input.number});
@@ -4777,7 +4777,7 @@ fn handle_mark_pr_ready_for_review(id: Option<Id>, params: Value) -> Response {
         let vars2 = serde_json::json!({"pullRequestId": pr.id});
         let (data2, m2, e2) = http::graphql_post::<serde_json::Value, Data2, serde_json::Value>(&client, &cfg, q2, &vars2).await;
         if let Some(e) = e2 { return (None, Meta{ next_cursor: None, has_more: false, rate: m2.rate }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
-        let pr2 = data2.and_then(|d| d.markPullRequestReadyForReview).and_then(|p| p.pullRequest).ok_or_else(|| ()).ok();
+        let pr2 = data2.and_then(|d| d.markPullRequestReadyForReview).and_then(|p| p.pullRequest).ok_or(()).ok();
         match pr2 {
             Some(p) => (Some(MarkPrReadyOrDraftResult{ id: p.id, is_draft: p.isDraft }), Meta{ next_cursor: None, has_more: false, rate: m2.rate }, None),
             None => (None, Meta{ next_cursor: None, has_more: false, rate: m2.rate }, Some(ErrorShape{ code: "server_error".into(), message: "Mutation response missing".into(), retriable: false }))
@@ -4813,7 +4813,7 @@ fn handle_convert_pr_to_draft(id: Option<Id>, params: Value) -> Response {
         let q = r#"
         query GetPrId($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { id isDraft } } rateLimit { remaining used resetAt } }
         "#;
-        #[derive(Deserialize)] struct PR { id: String, isDraft: bool }
+        #[derive(Deserialize)] struct PR { id: String, _isDraft: bool }
         #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
         #[derive(Deserialize)] struct Data { repository: Option<Repo> }
         let vars = serde_json::json!({"owner": input.owner, "repo": input.repo, "number": input.number});
@@ -4829,7 +4829,7 @@ fn handle_convert_pr_to_draft(id: Option<Id>, params: Value) -> Response {
         let vars2 = serde_json::json!({"pullRequestId": pr.id});
         let (data2, m2, e2) = http::graphql_post::<serde_json::Value, Data2, serde_json::Value>(&client, &cfg, q2, &vars2).await;
         if let Some(e) = e2 { return (None, Meta{ next_cursor: None, has_more: false, rate: m2.rate }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
-        let pr2 = data2.and_then(|d| d.convertPullRequestToDraft).and_then(|p| p.pullRequest).ok_or_else(|| ()).ok();
+        let pr2 = data2.and_then(|d| d.convertPullRequestToDraft).and_then(|p| p.pullRequest).ok_or(()).ok();
         match pr2 {
             Some(p) => (Some(MarkPrReadyOrDraftResult{ id: p.id, is_draft: p.isDraft }), Meta{ next_cursor: None, has_more: false, rate: m2.rate }, None),
             None => (None, Meta{ next_cursor: None, has_more: false, rate: m2.rate }, Some(ErrorShape{ code: "server_error".into(), message: "Mutation response missing".into(), retriable: false }))
@@ -5570,7 +5570,7 @@ fn handle_upsert_repo_variable(id: Option<Id>, params: Value) -> Response {
     let (out_val, text, is_err) = rt.block_on(async move {
         let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { let v = serde_json::json!({"error": {"code":"server_error","message": e.to_string(),"retriable": false}}); return (v, Some("upsert repo variable failed".to_string()), true) } };
         #[derive(Serialize)] struct Body { name: String, value: String }
-        #[derive(Deserialize)] struct Resp { name: String, value: Option<String>, updated_at: Option<String> }
+        #[derive(Deserialize)] struct Resp { _name: String, _value: Option<String>, _updated_at: Option<String> }
         let base = format!("/repos/{}/{}/actions/variables/{}", input.owner, input.repo, http::encode_path_segment(&input.name));
         // Try PATCH update first
         let patch = http::rest_patch_json::<Body, Resp>(&client, &cfg, &base, &Body{ name: input.name.clone(), value: input.value.clone() }).await;
@@ -5616,7 +5616,7 @@ fn handle_upsert_environment_variable(id: Option<Id>, params: Value) -> Response
         let repo_id = repo_resp.value.unwrap().id;
         // PATCH then POST
         #[derive(Serialize)] struct Body { name: String, value: String }
-        #[derive(Deserialize)] struct Resp { name: String, value: Option<String>, updated_at: Option<String> }
+        #[derive(Deserialize)] struct Resp { _name: String, _value: Option<String>, _updated_at: Option<String> }
         let base = format!("/repositories/{}/environments/{}/variables/{}", repo_id, http::encode_path_segment(&input.environment_name), http::encode_path_segment(&input.name));
         let patch = http::rest_patch_json::<Body, Resp>(&client, &cfg, &base, &Body{ name: input.name.clone(), value: input.value.clone() }).await;
         let (rate, err) = if patch.status == reqwest::StatusCode::NOT_FOUND {
