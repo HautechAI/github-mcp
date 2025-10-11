@@ -807,6 +807,7 @@ pub struct StatusSummary {
 pub struct PrOverviewStatusSection {
     pub item: Option<StatusSummary>,
     pub limit_contexts: i64,
+    pub meta: Meta,
 }
 #[derive(Debug, Serialize)]
 pub struct GetPullRequestOverviewItem {

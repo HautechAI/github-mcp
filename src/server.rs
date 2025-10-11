@@ -5550,13 +5550,28 @@ fn handle_get_pull_request_overview(id: Option<Id>, params: Value) -> Response {
             let mut counts = (0,0,0);
             if let Some(commit_node) = pr2.commits.nodes.into_iter().next() {
                 if let Some(rollup) = commit_node.commit.statusCheckRollup {
-                    if let Some(ctxs) = rollup.contexts { for n in ctxs.nodes { let state_up = n.conclusion.clone().or(n.state.clone()).unwrap_or_default().to_uppercase(); match state_up.as_str() { "SUCCESS" | "NEUTRAL" => counts.0 += 1, "PENDING" | "QUEUED" | "IN_PROGRESS" => counts.1 += 1, "FAILURE" | "ERROR" | "CANCELLED" | "TIMED_OUT" => counts.2 += 1, _ => {} } } }
+                    if let Some(ctxs) = rollup.contexts {
+                        for n in ctxs.nodes {
+                            let state_up = n
+                                .conclusion
+                                .clone()
+                                .or(n.state.clone())
+                                .unwrap_or_default()
+                                .to_uppercase();
+                            match state_up.as_str() {
+                                "SUCCESS" | "NEUTRAL" | "SKIPPED" => counts.0 += 1,
+                                "PENDING" | "QUEUED" | "IN_PROGRESS" => counts.1 += 1,
+                                "FAILURE" | "ERROR" | "CANCELLED" | "TIMED_OUT" | "ACTION_REQUIRED" | "STARTUP_FAILURE" | "STALE" => counts.2 += 1,
+                                _ => {}
+                            }
+                        }
+                    }
                 }
             }
             let overall = if counts.2 > 0 { "FAILURE" } else if counts.1 > 0 { "PENDING" } else { "SUCCESS" };
             let summary = StatusSummary{ overall_state: overall.into(), counts: StatusSummaryCounts{ success: counts.0, pending: counts.1, failure: counts.2 }, failing_contexts: None };
-            out.status_summary = Some(PrOverviewStatusSection{ item: Some(summary), limit_contexts });
-            }
+            out.status_summary = Some(PrOverviewStatusSection{ item: Some(summary), limit_contexts, meta: Meta{ next_cursor: None, has_more: false, rate: m2.rate } });
+        }
 
         (Some(out), Meta{ next_cursor: None, has_more: false, rate: gql_meta.rate }, None)
     });
