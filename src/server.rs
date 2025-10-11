@@ -5540,7 +5540,20 @@ fn handle_get_pull_request_overview(id: Option<Id>, params: Value) -> Response {
               }
             }
             "#;
-            #[derive(Deserialize)] struct CNode { __typename: String, #[serde(default)] name: Option<String>, #[serde(default)] conclusion: Option<String>, #[serde(default)] context: Option<String>, #[serde(default)] state: Option<String> }
+            #[derive(Deserialize)]
+            struct CNode {
+                __typename: String,
+                #[allow(dead_code)]
+                #[serde(default)]
+                name: Option<String>,
+                #[serde(default)]
+                conclusion: Option<String>,
+                #[allow(dead_code)]
+                #[serde(default)]
+                context: Option<String>,
+                #[serde(default)]
+                state: Option<String>,
+            }
             #[derive(Deserialize)] struct Contexts { nodes: Vec<CNode> }
             #[derive(Deserialize)] struct Rollup { contexts: Option<Contexts> }
             #[derive(Deserialize)] struct Commit { statusCheckRollup: Option<Rollup> }
