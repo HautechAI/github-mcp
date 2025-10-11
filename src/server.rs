@@ -4345,7 +4345,7 @@ fn handle_merge_pr(id: Option<Id>, params: Value) -> Response {
 
 fn handle_merge_pull_request(id: Option<Id>, params: Value) -> Response {
     // Map to existing merge_pr but with expected_head_sha guard mapped to sha
-    let mut input: MergePullRequestInput = match serde_json::from_value(params.clone()) {
+    let input: MergePullRequestInput = match serde_json::from_value(params.clone()) {
         Ok(v) => v,
         Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
     };
@@ -5574,7 +5574,7 @@ fn handle_upsert_repo_variable(id: Option<Id>, params: Value) -> Response {
         let base = format!("/repos/{}/{}/actions/variables/{}", input.owner, input.repo, http::encode_path_segment(&input.name));
         // Try PATCH update first
         let patch = http::rest_patch_json::<Body, Resp>(&client, &cfg, &base, &Body{ name: input.name.clone(), value: input.value.clone() }).await;
-        let (val, rate, err) = if patch.status == reqwest::StatusCode::NOT_FOUND {
+        let (_val, rate, err) = if patch.status == reqwest::StatusCode::NOT_FOUND {
             // Create
             let path = format!("/repos/{}/{}/actions/variables", input.owner, input.repo);
             let post = http::rest_post_json::<Body, Resp>(&client, &cfg, &path, &Body{ name: input.name.clone(), value: input.value.clone() }).await;
@@ -5659,7 +5659,7 @@ fn handle_upsert_repo_secret(id: Option<Id>, params: Value) -> Response {
         if let Some(err) = key_resp.error { let v = serde_json::json!({"error": {"code": err.code, "message": err.message, "retriable": err.retriable}, "meta": {"rate": key_resp.meta.rate}}); return (v, Some("get public key error".into()), true) }
         let key = key_resp.value.unwrap();
         // 2) Encrypt using sealed box
-        let encrypted_value = match crate::crypto::encrypt_sealed_box(&input.value, &key.key) {
+        let encrypted_value = match crypto::encrypt_sealed_box(&input.value, &key.key) {
             Ok(v) => v,
             Err(e) => {
                 let v = serde_json::json!({"error": {"code": "encryption_error", "message": e, "retriable": false}, "meta": {"rate": key_resp.meta.rate}});
