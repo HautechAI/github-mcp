@@ -328,7 +328,8 @@ try{const o=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));const r=o?.resul
 NODE
 )
   if [ -n "$TAG_NAME" ]; then
-    tool_call_if_available get_tag "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"name\":\"$TAG_NAME\"}"
+    # get_tag expects "tag" (not "name")
+    tool_call_if_available get_tag "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"tag\":\"$TAG_NAME\"}"
   else
     echo "[e2e] skip get_tag (no tag)" | tee -a "$LOG" >&2
   fi
@@ -344,7 +345,8 @@ try{const o=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));const r=o?.resul
 NODE
 )
   if [ -n "$REL_ID" ]; then
-    tool_call_if_available get_release "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"id\":$REL_ID}"
+    # get_release expects "release_id" (or "tag")
+    tool_call_if_available get_release "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"release_id\":$REL_ID}"
   else
     echo "[e2e] skip get_release (no release)" | tee -a "$LOG" >&2
   fi
