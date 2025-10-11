@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file by Release Please.
 
+## [0.6.0](https://github.com/HautechAI/github-mcp/compare/v0.5.0...v0.6.0) (2025-10-11)
+
+
+### Features
+
+* **ci:** coverage workflow + PR uncovered-lines table; gated live tests; docs (issue [#86](https://github.com/HautechAI/github-mcp/issues/86)) ([#87](https://github.com/HautechAI/github-mcp/issues/87)) ([2b39e8c](https://github.com/HautechAI/github-mcp/commit/2b39e8c26b2b0a41ced32aff6e58e763b21b5710))
+
 ## [0.5.0](https://github.com/HautechAI/github-mcp/compare/v0.4.1...v0.5.0) (2025-10-10)
 
 
