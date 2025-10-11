@@ -269,6 +269,8 @@ fn handle_tools_call(id: Option<Id>, params: Value) -> Response {
         "list_issue_comments_plain" => handle_list_issue_comments(id, args),
         "list_pull_requests" => handle_list_pull_requests(id, args),
         "get_pull_request" => handle_get_pull_request(id, args),
+        "get_issue_overview" => handle_get_issue_overview(id, args),
+        "get_pull_request_overview" => handle_get_pull_request_overview(id, args),
         "get_pr_status_summary" => handle_get_pr_status_summary(id, args),
         "list_pr_comments_plain" => handle_list_pr_comments(id, args),
         "list_pr_review_comments_plain" => handle_list_pr_review_comments(id, args),
@@ -5031,11 +5033,16 @@ fn handle_get_pull_request(id: Option<Id>, params: Value) -> Response {
         if let Some(e) = err { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
         let pr = match data.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
         let include_author = input.include_author.unwrap_or(false);
+        let include_body = input
+            .include
+            .as_ref()
+            .map(|v| v.iter().any(|s| s == "body"))
+            .unwrap_or(false);
         let item = GetPullRequestItem {
             id: pr.id,
             number: pr.number,
             title: pr.title,
-            body: pr.body,
+            body: if include_body { pr.body } else { None },
             state: pr.state,
             is_draft: pr.isDraft,
             created_at: pr.createdAt,
@@ -5099,21 +5106,26 @@ fn handle_get_issue(id: Option<Id>, params: Value) -> Response {
         #[derive(Deserialize)]
         struct Data { repository: Option<Repo> }
         let vars = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number });
-        let (data, _meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
+        let (data, gql_meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
         if let Some(e) = err { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
         let issue = match data.and_then(|d| d.repository).and_then(|r| r.issue) { Some(i) => i, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Issue not found".into(), retriable: false })) };
         let include_author = input.include_author.unwrap_or(false);
+        let include_body = input
+            .include
+            .as_ref()
+            .map(|v| v.iter().any(|s| s == "body"))
+            .unwrap_or(false);
         let item = GetIssueOutputItem{
             id: issue.id,
             number: issue.number,
             title: issue.title,
-            body: issue.body,
+            body: if include_body { issue.body } else { None },
             state: issue.state,
             created_at: issue.createdAt,
             updated_at: issue.updatedAt,
             author_login: if include_author { issue.author.map(|a| a.login) } else { None },
         };
-        (Some(item), Meta{ next_cursor: None, has_more: false, rate: None }, None)
+        (Some(item), Meta{ next_cursor: None, has_more: false, rate: gql_meta.rate }, None)
     });
     let out = GetIssueOutput {
         item,
@@ -5175,7 +5187,7 @@ fn handle_list_issue_comments(id: Option<Id>, params: Value) -> Response {
         #[derive(Deserialize)] struct Repo { issue: Option<Issue> }
         #[derive(Deserialize)] struct Data { repository: Option<Repo> }
         let vars = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number, "first": limit as i64, "after": input.cursor });
-        let (data, _meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
+        let (data, gql_meta, err) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, query, &vars).await;
         if let Some(e) = err { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
         let issue = match data.and_then(|d| d.repository).and_then(|r| r.issue) { Some(i) => i, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Issue not found".into(), retriable: false })) };
         let include_author = input.include_author.unwrap_or(false);
@@ -5186,7 +5198,7 @@ fn handle_list_issue_comments(id: Option<Id>, params: Value) -> Response {
             created_at: n.createdAt,
             updated_at: n.updatedAt,
         }).collect();
-        let meta = Meta { next_cursor: issue.comments.pageInfo.endCursor, has_more: issue.comments.pageInfo.hasNextPage, rate: None };
+        let meta = Meta { next_cursor: issue.comments.pageInfo.endCursor, has_more: issue.comments.pageInfo.hasNextPage, rate: gql_meta.rate };
         (Some(items), meta, None)
     });
     let out = ListIssueCommentsOutput {
@@ -5199,6 +5211,358 @@ fn handle_list_issue_comments(id: Option<Id>, params: Value) -> Response {
         .get("items")
         .and_then(|v| v.as_array())
         .map(|v| format!("{} comments", v.len()));
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_get_issue_overview(id: Option<Id>, params: Value) -> Response {
+    let input: GetIssueOverviewInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
+        // Base issue fetch
+        let q_issue = r#"
+        query GetIssue($owner: String!, $repo: String!, $number: Int!) {
+          repository(owner: $owner, name: $repo) {
+            issue(number: $number) { id number title body state createdAt updatedAt author { login } }
+          }
+          rateLimit { remaining used resetAt }
+        }
+        "#;
+        #[derive(Deserialize)] struct Author { login: String }
+        #[derive(Deserialize)] struct IssueBase { id: String, number: i64, title: String, body: Option<String>, state: String, createdAt: String, updatedAt: String, author: Option<Author> }
+        #[derive(Deserialize)] struct Repo { issue: Option<IssueBase> }
+        #[derive(Deserialize)] struct Data { repository: Option<Repo> }
+        let vars = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number });
+        let (data, gql_meta, err0) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, q_issue, &vars).await;
+        if let Some(e) = err0 { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
+        let base = match data.and_then(|d| d.repository).and_then(|r| r.issue) { Some(i) => i, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Issue not found".into(), retriable: false })) };
+        let include = input.include.unwrap_or_default();
+        let include_author = input.include_author.unwrap_or(false);
+        let include_body = include.iter().any(|s| s == "body");
+        // Build overview item
+        let mut out = GetIssueOverviewItem {
+            id: base.id,
+            number: base.number,
+            title: base.title,
+            state: base.state,
+            created_at: base.createdAt,
+            updated_at: base.updatedAt,
+            author_login: if include_author { base.author.map(|a| a.login) } else { None },
+            body: if include_body { base.body } else { None },
+            comments: None,
+        };
+        // Comments section
+        if include.iter().any(|s| s == "comments") {
+            let limit_val = input
+                .section_limits
+                .as_ref()
+                .and_then(|v| v.get("comments"))
+                .and_then(|v| v.as_u64())
+                .map(|n| n as u32);
+            let Ok(limit) = enforce_limit(limit_val) else { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "invalid_input".into(), message: "Invalid comments limit (1..=100)".into(), retriable: false })) };
+            let cursor = input
+                .section_cursors
+                .as_ref()
+                .and_then(|v| v.get("comments"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let q = r#"
+            query ListIssueComments($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
+              repository(owner: $owner, name: $repo) {
+                issue(number: $number) {
+                  comments(first: $first, after: $after) {
+                    nodes { id body createdAt updatedAt author { login } }
+                    pageInfo { hasNextPage endCursor }
+                  }
+                }
+              }
+            }
+            "#;
+            #[derive(Deserialize)] struct CAuthor { login: String }
+            #[derive(Deserialize)] struct CNode { id: String, body: String, createdAt: String, updatedAt: String, author: Option<CAuthor> }
+            #[derive(Deserialize)] struct PageInfo { hasNextPage: bool, endCursor: Option<String> }
+            #[derive(Deserialize)] struct Comments { nodes: Vec<CNode>, pageInfo: PageInfo }
+            #[derive(Deserialize)] struct Issue { comments: Comments }
+            #[derive(Deserialize)] struct Repo2 { issue: Option<Issue> }
+            #[derive(Deserialize)] struct Data2 { repository: Option<Repo2> }
+            let vars2 = serde_json::json!({ "owner": vars.get("owner").unwrap(), "repo": vars.get("repo").unwrap(), "number": vars.get("number").unwrap(), "first": limit as i64, "after": cursor });
+            let (data2, meta2, err2) = http::graphql_post::<serde_json::Value, Data2, serde_json::Value>(&client, &cfg, q, &vars2).await;
+            if let Some(e) = err2 { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
+            let issue = match data2.and_then(|d| d.repository).and_then(|r| r.issue) { Some(i) => i, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Issue not found".into(), retriable: false })) };
+            let items: Vec<ListIssueCommentsItem> = issue.comments.nodes.into_iter().map(|n| ListIssueCommentsItem{
+                id: n.id,
+                body: n.body,
+                author_login: if include_author { n.author.map(|a| a.login) } else { None },
+                created_at: n.createdAt,
+                updated_at: n.updatedAt,
+            }).collect();
+            out.comments = Some(IssueOverviewCommentsSection{ items: Some(items), meta: Meta{ next_cursor: issue.comments.pageInfo.endCursor, has_more: issue.comments.pageInfo.hasNextPage, rate: meta2.rate } });
+        }
+        (Some(out), Meta{ next_cursor: None, has_more: false, rate: gql_meta.rate }, None)
+    });
+    let out = GetIssueOverviewOutput { item, meta, error: err };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("item")
+        .and_then(|i| i.get("number"))
+        .and_then(|n| n.as_i64())
+        .map(|n| format!("Issue #{} overview", n));
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_get_pull_request_overview(id: Option<Id>, params: Value) -> Response {
+    let input: GetPullRequestOverviewInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) { Ok(c) => c, Err(e) => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "server_error".into(), message: e.to_string(), retriable: false })) };
+        // Base PR fetch
+        let q_pr = r#"
+        query GetPullRequest($owner: String!, $repo: String!, $number: Int!) {
+          repository(owner: $owner, name: $repo) {
+            pullRequest(number: $number) { id number title body state isDraft createdAt updatedAt author { login } }
+          }
+          rateLimit { remaining used resetAt }
+        }
+        "#;
+        #[derive(Deserialize)] struct Author { login: String }
+        #[derive(Deserialize)] struct PR { id: String, number: i64, title: String, body: Option<String>, state: String, isDraft: bool, createdAt: String, updatedAt: String, author: Option<Author> }
+        #[derive(Deserialize)] struct Repo { pullRequest: Option<PR> }
+        #[derive(Deserialize)] struct Data { repository: Option<Repo> }
+        let vars = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number });
+        let (data, gql_meta, err0) = http::graphql_post::<serde_json::Value, Data, serde_json::Value>(&client, &cfg, q_pr, &vars).await;
+        if let Some(e) = err0 { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
+        let pr = match data.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
+        let include = input.include.unwrap_or_default();
+        let include_author = input.include_author.unwrap_or(false);
+        let include_loc = input.include_location.unwrap_or(false);
+        let include_body = include.iter().any(|s| s == "body");
+        let mut out = GetPullRequestOverviewItem{
+            id: pr.id,
+            number: pr.number,
+            title: pr.title,
+            state: pr.state,
+            is_draft: pr.isDraft,
+            created_at: pr.createdAt,
+            updated_at: pr.updatedAt,
+            author_login: if include_author { pr.author.map(|a| a.login) } else { None },
+            body: if include_body { pr.body } else { None },
+            comments: None,
+            review_comments: None,
+            reviews: None,
+            commits: None,
+            files: None,
+            status_summary: None,
+        };
+        // Helper to read limits/cursors per section
+        let get_lim = |k: &str| -> Option<u32> {
+            input.section_limits.as_ref()?.get(k)?.as_u64().map(|n| n as u32)
+        };
+        let get_cur = |k: &str| -> Option<String> {
+            input.section_cursors.as_ref()?.get(k)?.as_str().map(|s| s.to_string())
+        };
+        // Comments (issue-style comments on PR)
+        if include.iter().any(|s| s == "comments") {
+            let Ok(limit) = enforce_limit(get_lim("comments")) else { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "invalid_input".into(), message: "Invalid comments limit (1..=100)".into(), retriable: false })) };
+            let cursor = get_cur("comments");
+            let q = r#"
+            query ListPrComments($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
+              repository(owner: $owner, name: $repo) {
+                pullRequest(number: $number) {
+                  comments(first: $first, after: $after) {
+                    nodes { id body createdAt updatedAt author { login } }
+                    pageInfo { hasNextPage endCursor }
+                  }
+                }
+              }
+            }
+            "#;
+            #[derive(Deserialize)] struct A { login: String }
+            #[derive(Deserialize)] struct N { id: String, body: String, createdAt: String, updatedAt: String, author: Option<A> }
+            #[derive(Deserialize)] struct PI { hasNextPage: bool, endCursor: Option<String> }
+            #[derive(Deserialize)] struct C { nodes: Vec<N>, pageInfo: PI }
+            #[derive(Deserialize)] struct P { comments: C }
+            #[derive(Deserialize)] struct R { pullRequest: Option<P> }
+            #[derive(Deserialize)] struct D { repository: Option<R> }
+            let vars2 = serde_json::json!({ "owner": vars.get("owner").unwrap(), "repo": vars.get("repo").unwrap(), "number": vars.get("number").unwrap(), "first": limit as i64, "after": cursor });
+            let (data2, m2, e2) = http::graphql_post::<serde_json::Value, D, serde_json::Value>(&client, &cfg, q, &vars2).await;
+            if let Some(e) = e2 { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
+            let pr2 = match data2.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
+            let items: Vec<PlainComment> = pr2.comments.nodes.into_iter().map(|n| PlainComment{ id: n.id, body: n.body, created_at: n.createdAt, updated_at: n.updatedAt, author_login: if include_author { n.author.map(|a| a.login) } else { None } }).collect();
+            out.comments = Some(PrOverviewSection{ items: Some(items), meta: Meta{ next_cursor: pr2.comments.pageInfo.endCursor, has_more: pr2.comments.pageInfo.hasNextPage, rate: m2.rate } });
+        }
+        // Review comments (REST)
+        if include.iter().any(|s| s == "review_comments") {
+            let Ok(limit) = enforce_limit(get_lim("review_comments")) else { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "invalid_input".into(), message: "Invalid review_comments limit (1..=100)".into(), retriable: false })) };
+            let cursor = get_cur("review_comments");
+            let (page, per_page, _cur) = page_per_from_cursor(cursor, Some(limit));
+            let path = format!("/repos/{}/{}/pulls/{}/comments?per_page={}&page={}", vars.get("owner").unwrap().as_str().unwrap(), vars.get("repo").unwrap().as_str().unwrap(), vars.get("number").unwrap().as_i64().unwrap(), per_page, page);
+            #[derive(Deserialize)] struct U { login: String }
+            #[derive(Deserialize)] struct RC { id: Option<i64>, node_id: Option<String>, body: String, user: Option<U>, created_at: String, updated_at: String, path: Option<String>, line: Option<i64>, start_line: Option<i64>, side: Option<String>, start_side: Option<String>, original_line: Option<i64>, original_start_line: Option<i64>, diff_hunk: Option<String>, commit_id: Option<String>, original_commit_id: Option<String> }
+            let resp = http::rest_get_json::<Vec<RC>>(&client, &cfg, &path).await;
+            if let Some(err) = resp.error { return (None, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
+            let rate = resp.meta.rate;
+            let items = resp.value.map(|arr| arr.into_iter().map(|n| {
+                let id = n.node_id.clone().unwrap_or_else(|| n.id.map(|i| i.to_string()).unwrap_or_default());
+                ReviewCommentItem{ id, body: n.body, created_at: n.created_at, updated_at: n.updated_at, author_login: if include_author { n.user.map(|u| u.login) } else { None }, path: if include_loc { n.path } else { None }, line: if include_loc { n.line } else { None }, start_line: if include_loc { n.start_line } else { None }, side: if include_loc { n.side.map(|s| s.to_uppercase()) } else { None }, start_side: if include_loc { n.start_side.map(|s| s.to_uppercase()) } else { None }, original_line: if include_loc { n.original_line } else { None }, original_start_line: if include_loc { n.original_start_line } else { None }, diff_hunk: if include_loc { n.diff_hunk } else { None }, commit_sha: if include_loc { n.commit_id } else { None }, original_commit_sha: if include_loc { n.original_commit_id } else { None } }
+            }).collect());
+            let has_more = resp.headers.as_ref().map(http::has_next_page_from_link).unwrap_or(false);
+            let next_cursor = if has_more { Some(http::encode_rest_cursor(http::RestCursor{ page: page + 1, per_page, path: None })) } else { None };
+            out.review_comments = Some(PrOverviewSection{ items, meta: Meta{ next_cursor, has_more, rate } });
+        }
+        // Reviews (GraphQL)
+        if include.iter().any(|s| s == "reviews") {
+            let Ok(limit) = enforce_limit(get_lim("reviews")) else { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "invalid_input".into(), message: "Invalid reviews limit (1..=100)".into(), retriable: false })) };
+            let cursor = get_cur("reviews");
+            let q = r#"
+            query ListPrReviews($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
+              repository(owner: $owner, name: $repo) {
+                pullRequest(number: $number) {
+                  reviews(first: $first, after: $after) {
+                    nodes { id state submittedAt author { login } }
+                    pageInfo { hasNextPage endCursor }
+                  }
+                }
+              }
+            }
+            "#;
+            #[derive(Deserialize)] struct A { login: String }
+            #[derive(Deserialize)] struct N { id: String, state: String, submittedAt: Option<String>, author: Option<A> }
+            #[derive(Deserialize)] struct PI { hasNextPage: bool, endCursor: Option<String> }
+            #[derive(Deserialize)] struct Rv { nodes: Vec<N>, pageInfo: PI }
+            #[derive(Deserialize)] struct P { reviews: Rv }
+            #[derive(Deserialize)] struct R { pullRequest: Option<P> }
+            #[derive(Deserialize)] struct D { repository: Option<R> }
+            let vars2 = serde_json::json!({ "owner": vars.get("owner").unwrap(), "repo": vars.get("repo").unwrap(), "number": vars.get("number").unwrap(), "first": limit as i64, "after": cursor });
+            let (data2, m2, e2) = http::graphql_post::<serde_json::Value, D, serde_json::Value>(&client, &cfg, q, &vars2).await;
+            if let Some(e) = e2 { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
+            let pr2 = match data2.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
+            let items: Vec<PrReviewItem> = pr2.reviews.nodes.into_iter().map(|n| PrReviewItem{ id: n.id, state: n.state, submitted_at: n.submittedAt, author_login: if include_author { n.author.map(|a| a.login) } else { None } }).collect();
+            out.reviews = Some(PrOverviewSection{ items: Some(items), meta: Meta{ next_cursor: pr2.reviews.pageInfo.endCursor, has_more: pr2.reviews.pageInfo.hasNextPage, rate: m2.rate } });
+        }
+        // Commits (GraphQL)
+        if include.iter().any(|s| s == "commits") {
+            let Ok(limit) = enforce_limit(get_lim("commits")) else { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "invalid_input".into(), message: "Invalid commits limit (1..=100)".into(), retriable: false })) };
+            let cursor = get_cur("commits");
+            let q = r#"
+            query ListPrCommits($owner: String!, $repo: String!, $number: Int!, $first: Int = 30, $after: String) {
+              repository(owner: $owner, name: $repo) {
+                pullRequest(number: $number) {
+                  commits(first: $first, after: $after) {
+                    nodes { commit { oid messageHeadline authoredDate author { user { login } } } }
+                    pageInfo { hasNextPage endCursor }
+                  }
+                }
+              }
+            }
+            "#;
+            #[derive(Deserialize)] struct U { login: String }
+            #[derive(Deserialize)] struct CA { user: Option<U> }
+            #[derive(Deserialize)] struct C { oid: String, messageHeadline: String, authoredDate: String, author: Option<CA> }
+            #[derive(Deserialize)] struct N { commit: C }
+            #[derive(Deserialize)] struct PI { hasNextPage: bool, endCursor: Option<String> }
+            #[derive(Deserialize)] struct Cs { nodes: Vec<N>, pageInfo: PI }
+            #[derive(Deserialize)] struct P { commits: Cs }
+            #[derive(Deserialize)] struct R { pullRequest: Option<P> }
+            #[derive(Deserialize)] struct D { repository: Option<R> }
+            let vars2 = serde_json::json!({ "owner": vars.get("owner").unwrap(), "repo": vars.get("repo").unwrap(), "number": vars.get("number").unwrap(), "first": limit as i64, "after": cursor });
+            let (data2, m2, e2) = http::graphql_post::<serde_json::Value, D, serde_json::Value>(&client, &cfg, q, &vars2).await;
+            if let Some(e) = e2 { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
+            let pr2 = match data2.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
+            let items: Vec<PrCommitItem> = pr2.commits.nodes.into_iter().map(|n| PrCommitItem{ sha: n.commit.oid, title: n.commit.messageHeadline, authored_at: n.commit.authoredDate, author_login: if include_author { n.commit.author.and_then(|a| a.user.map(|u| u.login)) } else { None } }).collect();
+            out.commits = Some(PrOverviewSection{ items: Some(items), meta: Meta{ next_cursor: pr2.commits.pageInfo.endCursor, has_more: pr2.commits.pageInfo.hasNextPage, rate: m2.rate } });
+        }
+        // Files (REST)
+        if include.iter().any(|s| s == "files") {
+            let Ok(limit) = enforce_limit(get_lim("files")) else { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "invalid_input".into(), message: "Invalid files limit (1..=100)".into(), retriable: false })) };
+            let cursor = get_cur("files");
+            let (page, per_page, _cur) = page_per_from_cursor(cursor, Some(limit));
+            let path = format!("/repos/{}/{}/pulls/{}/files?per_page={}&page={}", vars.get("owner").unwrap().as_str().unwrap(), vars.get("repo").unwrap().as_str().unwrap(), vars.get("number").unwrap().as_i64().unwrap(), per_page, page);
+            #[derive(Deserialize)] struct F { filename: String, status: String, additions: i64, deletions: i64, changes: i64, sha: String }
+            let resp = http::rest_get_json::<Vec<F>>(&client, &cfg, &path).await;
+            if let Some(err) = resp.error { return (None, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
+            let rate = resp.meta.rate;
+            let (items, count) = match resp.value {
+                Some(v) => {
+                    let count = v.len();
+                    let mapped = v.into_iter().map(|f| PrFileItem{ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions, changes: f.changes, sha: f.sha, patch: None }).collect();
+                    (Some(mapped), count)
+                }
+                None => (None, 0)
+            };
+            // Files endpoint may not provide Link; approximate has_more by page size fill
+            let has_more = (count as i64) >= i64::from(per_page);
+            let next_cursor = if has_more { Some(http::encode_rest_cursor(http::RestCursor{ page: page + 1, per_page, path: None })) } else { None };
+            out.files = Some(PrOverviewSection{ items, meta: Meta{ next_cursor, has_more, rate } });
+        }
+        // Status summary (GraphQL)
+        if include.iter().any(|s| s == "status_summary") {
+            let limit_contexts = input.status_limit_contexts.unwrap_or(10).min(100) as i64;
+            let q = r#"
+            query GetPrStatusSummary($owner: String!, $repo: String!, $number: Int!, $limit_contexts: Int = 10) {
+              repository(owner: $owner, name: $repo) {
+                pullRequest(number: $number) {
+                  commits(last: 1) { nodes { commit { oid statusCheckRollup { state contexts(first: $limit_contexts) { nodes { __typename ... on CheckRun { name conclusion } ... on StatusContext { context state } } } } } } }
+                }
+              }
+            }
+            "#;
+            #[derive(Deserialize)] struct CNode { __typename: String, #[serde(default)] name: Option<String>, #[serde(default)] conclusion: Option<String>, #[serde(default)] context: Option<String>, #[serde(default)] state: Option<String> }
+            #[derive(Deserialize)] struct Contexts { nodes: Vec<CNode> }
+            #[derive(Deserialize)] struct Rollup { contexts: Option<Contexts> }
+            #[derive(Deserialize)] struct Commit { statusCheckRollup: Option<Rollup> }
+            #[derive(Deserialize)] struct CommitNode { commit: Commit }
+            #[derive(Deserialize)] struct Commits { nodes: Vec<CommitNode> }
+            #[derive(Deserialize)] struct P { commits: Commits }
+            #[derive(Deserialize)] struct R { pullRequest: Option<P> }
+            #[derive(Deserialize)] struct D { repository: Option<R> }
+            let vars2 = serde_json::json!({ "owner": vars.get("owner").unwrap(), "repo": vars.get("repo").unwrap(), "number": vars.get("number").unwrap(), "limit_contexts": limit_contexts });
+            let (data2, m2, e2) = http::graphql_post::<serde_json::Value, D, serde_json::Value>(&client, &cfg, q, &vars2).await;
+            if let Some(e) = e2 { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
+            let pr2 = match data2.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
+            let mut counts = (0,0,0);
+            if let Some(commit_node) = pr2.commits.nodes.into_iter().next() {
+                if let Some(rollup) = commit_node.commit.statusCheckRollup {
+                    if let Some(ctxs) = rollup.contexts { for n in ctxs.nodes { let state_up = n.conclusion.clone().or(n.state.clone()).unwrap_or_default().to_uppercase(); match state_up.as_str() { "SUCCESS" | "NEUTRAL" => counts.0 += 1, "PENDING" | "QUEUED" | "IN_PROGRESS" => counts.1 += 1, "FAILURE" | "ERROR" | "CANCELLED" | "TIMED_OUT" => counts.2 += 1, _ => {} } } }
+                }
+            }
+            let overall = if counts.2 > 0 { "FAILURE" } else if counts.1 > 0 { "PENDING" } else { "SUCCESS" };
+            let summary = StatusSummary{ overall_state: overall.into(), counts: StatusSummaryCounts{ success: counts.0, pending: counts.1, failure: counts.2 }, failing_contexts: None };
+            out.status_summary = Some(PrOverviewStatusSection{ item: Some(summary), limit_contexts });
+            }
+
+        (Some(out), Meta{ next_cursor: None, has_more: false, rate: gql_meta.rate }, None)
+    });
+    let out = GetPullRequestOverviewOutput { item, meta, error: err };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("item")
+        .and_then(|i| i.get("number"))
+        .and_then(|n| n.as_i64())
+        .map(|n| format!("PR #{} overview", n));
     let is_error = structured
         .get("error")
         .and_then(|e| if e.is_null() { None } else { Some(e) })
