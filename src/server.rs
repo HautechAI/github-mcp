@@ -5297,7 +5297,7 @@ fn handle_get_issue_overview(id: Option<Id>, params: Value) -> Response {
             #[derive(Deserialize)] struct Issue { comments: Comments }
             #[derive(Deserialize)] struct Repo2 { issue: Option<Issue> }
             #[derive(Deserialize)] struct Data2 { repository: Option<Repo2> }
-            let vars2 = serde_json::json!({ "owner": vars.get("owner").unwrap(), "repo": vars.get("repo").unwrap(), "number": vars.get("number").unwrap(), "first": limit as i64, "after": cursor });
+            let vars2 = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number, "first": limit as i64, "after": cursor });
             let (data2, meta2, err2) = http::graphql_post::<serde_json::Value, Data2, serde_json::Value>(&client, &cfg, q, &vars2).await;
             if let Some(e) = err2 { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
             let issue = match data2.and_then(|d| d.repository).and_then(|r| r.issue) { Some(i) => i, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Issue not found".into(), retriable: false })) };
@@ -5411,7 +5411,7 @@ fn handle_get_pull_request_overview(id: Option<Id>, params: Value) -> Response {
             #[derive(Deserialize)] struct P { comments: C }
             #[derive(Deserialize)] struct R { pullRequest: Option<P> }
             #[derive(Deserialize)] struct D { repository: Option<R> }
-            let vars2 = serde_json::json!({ "owner": vars.get("owner").unwrap(), "repo": vars.get("repo").unwrap(), "number": vars.get("number").unwrap(), "first": limit as i64, "after": cursor });
+            let vars2 = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number, "first": limit as i64, "after": cursor });
             let (data2, m2, e2) = http::graphql_post::<serde_json::Value, D, serde_json::Value>(&client, &cfg, q, &vars2).await;
             if let Some(e) = e2 { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
             let pr2 = match data2.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
@@ -5423,7 +5423,10 @@ fn handle_get_pull_request_overview(id: Option<Id>, params: Value) -> Response {
             let Ok(limit) = enforce_limit(get_lim("review_comments")) else { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "invalid_input".into(), message: "Invalid review_comments limit (1..=100)".into(), retriable: false })) };
             let cursor = get_cur("review_comments");
             let (page, per_page, _cur) = page_per_from_cursor(cursor, Some(limit));
-            let path = format!("/repos/{}/{}/pulls/{}/comments?per_page={}&page={}", vars.get("owner").unwrap().as_str().unwrap(), vars.get("repo").unwrap().as_str().unwrap(), vars.get("number").unwrap().as_i64().unwrap(), per_page, page);
+            let path = format!(
+                "/repos/{}/{}/pulls/{}/comments?per_page={}&page={}",
+                input.owner, input.repo, input.number, per_page, page
+            );
             #[derive(Deserialize)] struct U { login: String }
             #[derive(Deserialize)] struct RC { id: Option<i64>, node_id: Option<String>, body: String, user: Option<U>, created_at: String, updated_at: String, path: Option<String>, line: Option<i64>, start_line: Option<i64>, side: Option<String>, start_side: Option<String>, original_line: Option<i64>, original_start_line: Option<i64>, diff_hunk: Option<String>, commit_id: Option<String>, original_commit_id: Option<String> }
             let resp = http::rest_get_json::<Vec<RC>>(&client, &cfg, &path).await;
@@ -5460,7 +5463,7 @@ fn handle_get_pull_request_overview(id: Option<Id>, params: Value) -> Response {
             #[derive(Deserialize)] struct P { reviews: Rv }
             #[derive(Deserialize)] struct R { pullRequest: Option<P> }
             #[derive(Deserialize)] struct D { repository: Option<R> }
-            let vars2 = serde_json::json!({ "owner": vars.get("owner").unwrap(), "repo": vars.get("repo").unwrap(), "number": vars.get("number").unwrap(), "first": limit as i64, "after": cursor });
+            let vars2 = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number, "first": limit as i64, "after": cursor });
             let (data2, m2, e2) = http::graphql_post::<serde_json::Value, D, serde_json::Value>(&client, &cfg, q, &vars2).await;
             if let Some(e) = e2 { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
             let pr2 = match data2.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
@@ -5492,7 +5495,7 @@ fn handle_get_pull_request_overview(id: Option<Id>, params: Value) -> Response {
             #[derive(Deserialize)] struct P { commits: Cs }
             #[derive(Deserialize)] struct R { pullRequest: Option<P> }
             #[derive(Deserialize)] struct D { repository: Option<R> }
-            let vars2 = serde_json::json!({ "owner": vars.get("owner").unwrap(), "repo": vars.get("repo").unwrap(), "number": vars.get("number").unwrap(), "first": limit as i64, "after": cursor });
+            let vars2 = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number, "first": limit as i64, "after": cursor });
             let (data2, m2, e2) = http::graphql_post::<serde_json::Value, D, serde_json::Value>(&client, &cfg, q, &vars2).await;
             if let Some(e) = e2 { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
             let pr2 = match data2.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
@@ -5504,7 +5507,10 @@ fn handle_get_pull_request_overview(id: Option<Id>, params: Value) -> Response {
             let Ok(limit) = enforce_limit(get_lim("files")) else { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "invalid_input".into(), message: "Invalid files limit (1..=100)".into(), retriable: false })) };
             let cursor = get_cur("files");
             let (page, per_page, _cur) = page_per_from_cursor(cursor, Some(limit));
-            let path = format!("/repos/{}/{}/pulls/{}/files?per_page={}&page={}", vars.get("owner").unwrap().as_str().unwrap(), vars.get("repo").unwrap().as_str().unwrap(), vars.get("number").unwrap().as_i64().unwrap(), per_page, page);
+            let path = format!(
+                "/repos/{}/{}/pulls/{}/files?per_page={}&page={}",
+                input.owner, input.repo, input.number, per_page, page
+            );
             #[derive(Deserialize)] struct F { filename: String, status: String, additions: i64, deletions: i64, changes: i64, sha: String }
             let resp = http::rest_get_json::<Vec<F>>(&client, &cfg, &path).await;
             if let Some(err) = resp.error { return (None, Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, Some(ErrorShape{ code: err.code, message: err.message, retriable: err.retriable })) }
@@ -5543,7 +5549,7 @@ fn handle_get_pull_request_overview(id: Option<Id>, params: Value) -> Response {
             #[derive(Deserialize)] struct P { commits: Commits }
             #[derive(Deserialize)] struct R { pullRequest: Option<P> }
             #[derive(Deserialize)] struct D { repository: Option<R> }
-            let vars2 = serde_json::json!({ "owner": vars.get("owner").unwrap(), "repo": vars.get("repo").unwrap(), "number": vars.get("number").unwrap(), "limit_contexts": limit_contexts });
+            let vars2 = serde_json::json!({ "owner": input.owner, "repo": input.repo, "number": input.number, "limit_contexts": limit_contexts });
             let (data2, m2, e2) = http::graphql_post::<serde_json::Value, D, serde_json::Value>(&client, &cfg, q, &vars2).await;
             if let Some(e) = e2 { return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: e.code, message: e.message, retriable: e.retriable })) }
             let pr2 = match data2.and_then(|d| d.repository).and_then(|r| r.pullRequest) { Some(p) => p, None => return (None, Meta{ next_cursor: None, has_more: false, rate: None }, Some(ErrorShape{ code: "not_found".into(), message: "Pull request not found".into(), retriable: false })) };
