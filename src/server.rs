@@ -9,10 +9,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::config::Config;
-use crate::crypto;
 use crate::http;
 use crate::mcp::{mcp_wrap, IncludeRateGuard};
 use crate::tools::*;
+use github_mcp::crypto;
 
 // Minimal diagnostics helper: writes to stderr and optionally to a file if MCP_DIAG_LOG is set.
 static DIAG_FILE: OnceLock<Option<Mutex<File>>> = OnceLock::new();
