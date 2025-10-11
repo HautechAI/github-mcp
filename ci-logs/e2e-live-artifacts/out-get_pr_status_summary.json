@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","result":{"content":[{"text":"{\"error\":{\"code\":\"server_error\",\"message\":\"invalid type: null, expected struct ContextNode\",\"retriable\":false},\"item\":null}","type":"text"}],"isError":true,"structuredContent":{"error":{"code":"server_error","message":"invalid type: null, expected struct ContextNode","retriable":false},"item":null}},"id":10}

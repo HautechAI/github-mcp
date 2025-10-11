@@ -79,7 +79,19 @@ session_call() {
   local params_json="$1"; shift || true
   local out_var="$1"; shift || true
   local req
-  req=$(node -e "process.stdout.write(JSON.stringify({method: '$method', params: $params_json || {}}))")
+  # Build JSON using Node with argv to avoid inline-eval pitfalls; fallback to empty object.
+  req=$(node - "$method" "${params_json:-}" <<'NODE'
+const [,,method,paramsRaw] = process.argv;
+let params = {};
+try { params = paramsRaw ? JSON.parse(paramsRaw) : {}; }
+catch(e){
+  // Log parse warning to stderr; continue with {} to keep session alive.
+  console.error('[e2e] warn: invalid params for', method, '-', e?.message || e);
+  params = {};
+}
+process.stdout.write(JSON.stringify({ method, params }));
+NODE
+  )
   # Write request
   if ! printf '%s\n' "$req" >&${SESSION_IN_FD}; then
     echo "[e2e][fatal] failed to write to session (method=$method)" | tee -a "$LOG" >&2
@@ -302,7 +314,8 @@ try{const o=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));const r=o?.resul
 NODE
 )
 if [ -n "$COMMIT_SHA" ]; then
-  tool_call_if_available get_commit "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"sha\":\"$COMMIT_SHA\"}"
+  # get_commit expects "ref" (sha or ref), not "sha"
+  tool_call_if_available get_commit "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"ref\":\"$COMMIT_SHA\"}"
 else
   echo "[e2e] skip get_commit (no sha)" | tee -a "$LOG" >&2
 fi
