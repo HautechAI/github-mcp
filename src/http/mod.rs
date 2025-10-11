@@ -233,6 +233,364 @@ pub async fn rest_get_json<T: for<'de> Deserialize<'de>>(
     }
 }
 
+// Variant of GET returning JSON but allowing a custom Accept header (e.g., star+json)
+pub async fn rest_get_json_with_accept<T: for<'de> Deserialize<'de>>(
+    client: &Client,
+    cfg: &Config,
+    path: &str,
+    accept: &str,
+) -> RestResponse<T> {
+    let url = format!("{}{}", cfg.api_url, path);
+    let mut attempt: u32 = 0;
+    loop {
+        let res = client
+            .get(&url)
+            .header(AUTHORIZATION, auth_header(&cfg.token))
+            .header("X-GitHub-Api-Version", &cfg.api_version)
+            .header(ACCEPT, HeaderValue::from_str(accept).unwrap())
+            .send()
+            .await;
+
+        let res = match res {
+            Ok(r) => r,
+            Err(e) => {
+                if attempt < 5 {
+                    tokio::time::sleep(compute_backoff(attempt, None)).await;
+                    attempt += 1;
+                    continue;
+                }
+                return RestResponse {
+                    value: None,
+                    meta: Meta { rate: None },
+                    error: Some(ErrorInfo {
+                        code: "upstream_error".into(),
+                        message: e.to_string(),
+                        retriable: true,
+                    }),
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                    headers: None,
+                };
+            }
+        };
+
+        let status = res.status();
+        let headers = res.headers().clone();
+        let rate = extract_rate_from_rest(&headers);
+        let retry_after = headers
+            .get(RETRY_AFTER)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok())
+            .map(Duration::from_secs);
+
+        if status.is_success() {
+            match res.json::<T>().await {
+                Ok(val) => {
+                    return RestResponse {
+                        value: Some(val),
+                        meta: Meta { rate: Some(rate) },
+                        error: None,
+                        status,
+                        headers: Some(headers),
+                    };
+                }
+                Err(e) => {
+                    return RestResponse {
+                        value: None,
+                        meta: Meta { rate: Some(rate) },
+                        error: Some(ErrorInfo {
+                            code: "server_error".into(),
+                            message: e.to_string(),
+                            retriable: false,
+                        }),
+                        status,
+                        headers: Some(headers),
+                    };
+                }
+            }
+        }
+
+        if (status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error()) && attempt < 5 {
+            let backoff = compute_backoff(attempt, retry_after);
+            tokio::time::sleep(backoff).await;
+            attempt += 1;
+            continue;
+        }
+        let text = res.text().await.unwrap_or_default();
+        let err = map_status_to_error(status, text);
+        return RestResponse {
+            value: None,
+            meta: Meta { rate: Some(rate) },
+            error: Some(err),
+            status,
+            headers: Some(headers),
+        };
+    }
+}
+
+// Generic JSON PUT helper
+pub async fn rest_put_json<TReq: Serialize, TResp: for<'de> Deserialize<'de>>(
+    client: &Client,
+    cfg: &Config,
+    path: &str,
+    body: &TReq,
+) -> RestResponse<TResp> {
+    let url = format!("{}{}", cfg.api_url, path);
+    let mut attempt: u32 = 0;
+    loop {
+        let res = client
+            .put(&url)
+            .header(AUTHORIZATION, auth_header(&cfg.token))
+            .header("X-GitHub-Api-Version", &cfg.api_version)
+            .header(
+                ACCEPT,
+                HeaderValue::from_static("application/vnd.github+json"),
+            )
+            .json(body)
+            .send()
+            .await;
+        let res = match res {
+            Ok(r) => r,
+            Err(e) => {
+                if attempt < 5 {
+                    tokio::time::sleep(compute_backoff(attempt, None)).await;
+                    attempt += 1;
+                    continue;
+                }
+                return RestResponse {
+                    value: None,
+                    meta: Meta { rate: None },
+                    error: Some(ErrorInfo {
+                        code: "upstream_error".into(),
+                        message: e.to_string(),
+                        retriable: true,
+                    }),
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                    headers: None,
+                };
+            }
+        };
+        let status = res.status();
+        let headers = res.headers().clone();
+        let rate = extract_rate_from_rest(&headers);
+        if status.is_success() {
+            match res.json::<TResp>().await {
+                Ok(val) => {
+                    return RestResponse {
+                        value: Some(val),
+                        meta: Meta { rate: Some(rate) },
+                        error: None,
+                        status,
+                        headers: Some(headers),
+                    };
+                }
+                Err(e) => {
+                    return RestResponse {
+                        value: None,
+                        meta: Meta { rate: Some(rate) },
+                        error: Some(ErrorInfo {
+                            code: "server_error".into(),
+                            message: e.to_string(),
+                            retriable: false,
+                        }),
+                        status,
+                        headers: Some(headers),
+                    };
+                }
+            }
+        }
+        if (status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error()) && attempt < 5 {
+            tokio::time::sleep(compute_backoff(attempt, None)).await;
+            attempt += 1;
+            continue;
+        }
+        let text = res.text().await.unwrap_or_default();
+        let err = map_status_to_error(status, text);
+        return RestResponse {
+            value: None,
+            meta: Meta { rate: Some(rate) },
+            error: Some(err),
+            status,
+            headers: Some(headers),
+        };
+    }
+}
+
+// Generic JSON PATCH helper
+pub async fn rest_patch_json<TReq: Serialize, TResp: for<'de> Deserialize<'de>>(
+    client: &Client,
+    cfg: &Config,
+    path: &str,
+    body: &TReq,
+) -> RestResponse<TResp> {
+    let url = format!("{}{}", cfg.api_url, path);
+    let mut attempt: u32 = 0;
+    loop {
+        let res = client
+            .patch(&url)
+            .header(AUTHORIZATION, auth_header(&cfg.token))
+            .header("X-GitHub-Api-Version", &cfg.api_version)
+            .header(
+                ACCEPT,
+                HeaderValue::from_static("application/vnd.github+json"),
+            )
+            .json(body)
+            .send()
+            .await;
+        let res = match res {
+            Ok(r) => r,
+            Err(e) => {
+                if attempt < 5 {
+                    tokio::time::sleep(compute_backoff(attempt, None)).await;
+                    attempt += 1;
+                    continue;
+                }
+                return RestResponse {
+                    value: None,
+                    meta: Meta { rate: None },
+                    error: Some(ErrorInfo {
+                        code: "upstream_error".into(),
+                        message: e.to_string(),
+                        retriable: true,
+                    }),
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                    headers: None,
+                };
+            }
+        };
+        let status = res.status();
+        let headers = res.headers().clone();
+        let rate = extract_rate_from_rest(&headers);
+        if status.is_success() {
+            match res.json::<TResp>().await {
+                Ok(val) => {
+                    return RestResponse {
+                        value: Some(val),
+                        meta: Meta { rate: Some(rate) },
+                        error: None,
+                        status,
+                        headers: Some(headers),
+                    }
+                }
+                Err(e) => {
+                    return RestResponse {
+                        value: None,
+                        meta: Meta { rate: Some(rate) },
+                        error: Some(ErrorInfo {
+                            code: "server_error".into(),
+                            message: e.to_string(),
+                            retriable: false,
+                        }),
+                        status,
+                        headers: Some(headers),
+                    }
+                }
+            }
+        }
+        if (status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error()) && attempt < 5 {
+            tokio::time::sleep(compute_backoff(attempt, None)).await;
+            attempt += 1;
+            continue;
+        }
+        let text = res.text().await.unwrap_or_default();
+        let err = map_status_to_error(status, text);
+        return RestResponse {
+            value: None,
+            meta: Meta { rate: Some(rate) },
+            error: Some(err),
+            status,
+            headers: Some(headers),
+        };
+    }
+}
+
+// Generic JSON POST helper
+pub async fn rest_post_json<TReq: Serialize, TResp: for<'de> Deserialize<'de>>(
+    client: &Client,
+    cfg: &Config,
+    path: &str,
+    body: &TReq,
+) -> RestResponse<TResp> {
+    let url = format!("{}{}", cfg.api_url, path);
+    let mut attempt: u32 = 0;
+    loop {
+        let res = client
+            .post(&url)
+            .header(AUTHORIZATION, auth_header(&cfg.token))
+            .header("X-GitHub-Api-Version", &cfg.api_version)
+            .header(
+                ACCEPT,
+                HeaderValue::from_static("application/vnd.github+json"),
+            )
+            .json(body)
+            .send()
+            .await;
+        let res = match res {
+            Ok(r) => r,
+            Err(e) => {
+                if attempt < 5 {
+                    tokio::time::sleep(compute_backoff(attempt, None)).await;
+                    attempt += 1;
+                    continue;
+                }
+                return RestResponse {
+                    value: None,
+                    meta: Meta { rate: None },
+                    error: Some(ErrorInfo {
+                        code: "upstream_error".into(),
+                        message: e.to_string(),
+                        retriable: true,
+                    }),
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                    headers: None,
+                };
+            }
+        };
+        let status = res.status();
+        let headers = res.headers().clone();
+        let rate = extract_rate_from_rest(&headers);
+        if status.is_success() || status == StatusCode::ACCEPTED {
+            match res.json::<TResp>().await {
+                Ok(val) => {
+                    return RestResponse {
+                        value: Some(val),
+                        meta: Meta { rate: Some(rate) },
+                        error: None,
+                        status,
+                        headers: Some(headers),
+                    }
+                }
+                Err(e) => {
+                    return RestResponse {
+                        value: None,
+                        meta: Meta { rate: Some(rate) },
+                        error: Some(ErrorInfo {
+                            code: "server_error".into(),
+                            message: e.to_string(),
+                            retriable: false,
+                        }),
+                        status,
+                        headers: Some(headers),
+                    }
+                }
+            }
+        }
+        if (status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error()) && attempt < 5 {
+            tokio::time::sleep(compute_backoff(attempt, None)).await;
+            attempt += 1;
+            continue;
+        }
+        let text = res.text().await.unwrap_or_default();
+        let err = map_status_to_error(status, text);
+        return RestResponse {
+            value: None,
+            meta: Meta { rate: Some(rate) },
+            error: Some(err),
+            status,
+            headers: Some(headers),
+        };
+    }
+}
+
 pub async fn rest_get_text_with_accept(
     client: &Client,
     cfg: &Config,

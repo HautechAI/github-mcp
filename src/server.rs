@@ -272,14 +272,20 @@ fn handle_tools_call(id: Option<Id>, params: Value) -> Response {
         "get_pr_status_summary" => handle_get_pr_status_summary(id, args),
         "list_pr_comments_plain" => handle_list_pr_comments(id, args),
         "list_pr_review_comments_plain" => handle_list_pr_review_comments(id, args),
+        // Unified alias for review comments
+        "list_pr_review_comments" => handle_list_pr_review_comments(id, args),
         "list_pr_review_threads_light" => handle_list_pr_review_threads(id, args),
         "resolve_pr_review_thread" => handle_resolve_pr_review_thread(id, args),
         "unresolve_pr_review_thread" => handle_unresolve_pr_review_thread(id, args),
         "list_pr_reviews_light" => handle_list_pr_reviews(id, args),
+        "list_pr_reviews" => handle_list_pr_reviews(id, args),
         "list_pr_commits_light" => handle_list_pr_commits(id, args),
+        "list_pr_commits" => handle_list_pr_commits(id, args),
         "list_pr_files_light" => handle_list_pr_files(id, args),
+        "list_pr_files" => handle_list_pr_files(id, args),
         "get_pr_diff" => handle_get_pr_text(id, args, true),
         "get_pr_patch" => handle_get_pr_text(id, args, false),
+        "pr_summary" => handle_pr_summary(id, args),
         "list_workflows_light" => handle_list_workflows(id, args),
         "list_workflow_runs_light" => handle_list_workflow_runs(id, args),
         "get_workflow_run_light" => handle_get_workflow_run(id, args),
@@ -292,6 +298,22 @@ fn handle_tools_call(id: Option<Id>, params: Value) -> Response {
         "list_repo_variables_light" => handle_list_repo_variables(id, args),
         "list_environments_light" => handle_list_environments(id, args),
         "list_environment_variables_light" => handle_list_environment_variables(id, args),
+        // New methods per Issue #91
+        "list_commits" => handle_list_commits(id, args),
+        "get_commit" => handle_get_commit(id, args),
+        "list_tags" => handle_list_tags(id, args),
+        "get_tag" => handle_get_tag(id, args),
+        "list_branches" => handle_list_branches(id, args),
+        "list_releases" => handle_list_releases(id, args),
+        "get_release" => handle_get_release(id, args),
+        "list_starred_repositories" => handle_list_starred_repositories(id, args),
+        "merge_pr" => handle_merge_pr(id, args),
+        "search_issues" => handle_search_issues(id, args),
+        "search_pull_requests" => handle_search_pull_requests(id, args),
+        "search_repositories" => handle_search_repositories(id, args),
+        "update_issue" => handle_update_issue(id, args),
+        "update_pull_request" => handle_update_pull_request(id, args),
+        "fork_repository" => handle_fork_repository(id, args),
         _ => rpc_error(id, -32601, &format!("Tool not found: {}", call.name), None),
     }
 }
@@ -448,6 +470,11 @@ fn parse_page_cursor(
         }
     }
     (page.unwrap_or(1), per_page.unwrap_or(30).min(100), None)
+}
+
+// Convenience: convert cursor/limit into REST page/per_page
+fn page_per_from_cursor(cursor: Option<String>, limit: Option<u32>) -> (u32, u32, Option<String>) {
+    parse_page_cursor(cursor, None, limit)
 }
 
 fn handle_list_workflows(id: Option<Id>, params: Value) -> Response {
@@ -2587,9 +2614,33 @@ fn handle_list_pr_commits(id: Option<Id>, params: Value) -> Response {
 }
 
 fn handle_list_pr_files(id: Option<Id>, params: Value) -> Response {
-    let input: ListPrFilesInput = match serde_json::from_value(params) {
+    // Accept both legacy (page/per_page) and unified (cursor/limit)
+    let input: ListPrFilesInput = match serde_json::from_value(params.clone()) {
         Ok(v) => v,
-        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+        Err(_) => {
+            #[derive(Deserialize)]
+            struct Unified {
+                owner: String,
+                repo: String,
+                number: i64,
+                #[allow(dead_code)]
+                cursor: Option<String>,
+                limit: Option<u32>,
+                include_patch: Option<bool>,
+            }
+            let uni: Unified = match serde_json::from_value(params) {
+                Ok(v) => v,
+                Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+            };
+            ListPrFilesInput {
+                owner: uni.owner,
+                repo: uni.repo,
+                number: uni.number,
+                page: None,
+                per_page: uni.limit,
+                include_patch: uni.include_patch,
+            }
+        }
     };
     let cfg = match Config::from_env() {
         Ok(c) => c,
@@ -2615,9 +2666,8 @@ fn handle_list_pr_files(id: Option<Id>, params: Value) -> Response {
                 )
             }
         };
-        // Map REST pagination inputs
-        let page = input.page.unwrap_or(1);
-        let per_page = input.per_page.unwrap_or(30).min(100);
+        // Map REST pagination inputs; if page unspecified, derive from cursor/limit
+        let (page, per_page, _cur) = parse_page_cursor(None, input.page, input.per_page);
         let path = format!(
             "/repos/{}/{}/pulls/{}/files?per_page={}&page={}",
             input.owner, input.repo, input.number, per_page, page
@@ -2630,6 +2680,7 @@ fn handle_list_pr_files(id: Option<Id>, params: Value) -> Response {
             deletions: i64,
             changes: i64,
             sha: String,
+            #[allow(dead_code)]
             patch: Option<String>,
         }
         let resp = http::rest_get_json::<Vec<File>>(&client, &cfg, &path).await;
@@ -2653,7 +2704,11 @@ fn handle_list_pr_files(id: Option<Id>, params: Value) -> Response {
         let has_more =
             (resp.value.as_ref().map(|v| v.len()).unwrap_or(0) as i64) >= i64::from(per_page);
         let next_cursor = if has_more {
-            Some(format!("page:{}", page + 1))
+            Some(http::encode_rest_cursor(http::RestCursor {
+                page: page + 1,
+                per_page,
+                path: None,
+            }))
         } else {
             None
         };
@@ -2696,6 +2751,1998 @@ fn handle_list_pr_files(id: Option<Id>, params: Value) -> Response {
         .get("error")
         .and_then(|e| if e.is_null() { None } else { Some(e) })
         .is_some();
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_pr_summary(id: Option<Id>, params: Value) -> Response {
+    #[derive(Deserialize)]
+    struct Input {
+        owner: String,
+        repo: String,
+        number: i64,
+        include_checks: Option<bool>,
+        include_files: Option<bool>,
+        include_reviews: Option<bool>,
+    }
+    #[derive(Serialize)]
+    struct ChecksSummary {
+        state: Option<String>,
+        success: i64,
+        failure: i64,
+        pending: i64,
+    }
+    #[derive(Serialize)]
+    struct SummaryItem {
+        number: i64,
+        title: String,
+        state: String,
+        is_draft: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        author_login: Option<String>,
+        head_sha: String,
+        base_ref: String,
+        commits_count: i64,
+        changed_files_count: i64,
+        additions: i64,
+        deletions: i64,
+        review_states: std::collections::BTreeMap<String, i64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        checks_summary: Option<ChecksSummary>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        files: Option<Vec<PrFileItem>>,
+    }
+    #[derive(Serialize)]
+    struct Output {
+        item: Option<SummaryItem>,
+        meta: Meta,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<ErrorShape>,
+    }
+
+    let input: Input = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        // 1) GET PR
+        #[derive(Deserialize)]
+        struct PR {
+            number: i64,
+            title: String,
+            state: String,
+            draft: bool,
+            user: Option<User>,
+            head: Head,
+            base: Base,
+            commits: i64,
+            changed_files: i64,
+            additions: i64,
+            deletions: i64,
+        }
+        #[derive(Deserialize)]
+        struct User {
+            login: String,
+        }
+        #[derive(Deserialize)]
+        struct Head {
+            sha: String,
+        }
+        #[derive(Deserialize)]
+        struct Base {
+            #[allow(dead_code)]
+            label: String,
+            #[serde(rename = "ref")]
+            r#ref: String,
+        }
+        let pr_path = format!(
+            "/repos/{}/{}/pulls/{}",
+            input.owner, input.repo, input.number
+        );
+        let pr_resp = http::rest_get_json::<PR>(&client, &cfg, &pr_path).await;
+        if let Some(err) = pr_resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: pr_resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let pr = pr_resp.value.unwrap();
+        let mut review_states: std::collections::BTreeMap<String, i64> =
+            std::collections::BTreeMap::new();
+        let mut files_opt: Option<Vec<PrFileItem>> = None;
+        let mut checks_opt: Option<ChecksSummary> = None;
+        // 2) optionally reviews
+        if input.include_reviews.unwrap_or(true) {
+            #[derive(Deserialize)]
+            struct Rev {
+                state: String,
+            }
+            let reviews_path = format!(
+                "/repos/{}/{}/pulls/{}/reviews?per_page=100&page=1",
+                input.owner, input.repo, input.number
+            );
+            let reviews = http::rest_get_json::<Vec<Rev>>(&client, &cfg, &reviews_path).await;
+            if let Some(v) = reviews.value {
+                for r in v {
+                    *review_states.entry(r.state).or_insert(0) += 1;
+                }
+            }
+        }
+        // 3) optionally files
+        if input.include_files.unwrap_or(true) {
+            let files_path = format!(
+                "/repos/{}/{}/pulls/{}/files?per_page=100&page=1",
+                input.owner, input.repo, input.number
+            );
+            #[derive(Deserialize)]
+            struct File {
+                filename: String,
+                status: String,
+                additions: i64,
+                deletions: i64,
+                changes: i64,
+                sha: String,
+                #[allow(dead_code)]
+                patch: Option<String>,
+            }
+            let resp = http::rest_get_json::<Vec<File>>(&client, &cfg, &files_path).await;
+            files_opt = resp.value.map(|v| {
+                v.into_iter()
+                    .map(|f| PrFileItem {
+                        filename: f.filename,
+                        status: f.status,
+                        additions: f.additions,
+                        deletions: f.deletions,
+                        changes: f.changes,
+                        sha: f.sha,
+                        patch: None,
+                    })
+                    .collect()
+            });
+        }
+        // 4) optionally checks summary from status+check-runs
+        if input.include_checks.unwrap_or(true) {
+            // legacy statuses
+            #[derive(Deserialize)]
+            struct Status {
+                state: String,
+            }
+            let status_path = format!(
+                "/repos/{}/{}/commits/{}/status",
+                input.owner, input.repo, pr.head.sha
+            );
+            let status_resp = http::rest_get_json::<Status>(&client, &cfg, &status_path).await;
+            // check runs
+            #[derive(Deserialize)]
+            struct CheckRun {
+                conclusion: Option<String>,
+                status: String,
+            }
+            #[derive(Deserialize)]
+            struct CheckRuns {
+                #[allow(dead_code)]
+                total_count: i64,
+                check_runs: Vec<CheckRun>,
+            }
+            let cr_path = format!(
+                "/repos/{}/{}/commits/{}/check-runs",
+                input.owner, input.repo, pr.head.sha
+            );
+            let checks_resp = http::rest_get_json_with_accept::<CheckRuns>(
+                &client,
+                &cfg,
+                &cr_path,
+                "application/vnd.github+json",
+            )
+            .await;
+            let mut success = 0;
+            let mut failure = 0;
+            let mut pending = 0;
+            if let Some(v) = checks_resp.value {
+                for cr in v.check_runs {
+                    match (cr.conclusion.as_deref(), cr.status.as_str()) {
+                        (Some("success"), _) => success += 1,
+                        (Some("failure"), _) | (Some("timed_out"), _) | (Some("cancelled"), _) => {
+                            failure += 1
+                        }
+                        (_, s) if s != "completed" => pending += 1,
+                        _ => {}
+                    }
+                }
+            }
+            let state = status_resp.value.map(|s| s.state);
+            checks_opt = Some(ChecksSummary {
+                state,
+                success,
+                failure,
+                pending,
+            });
+        }
+        let item = SummaryItem {
+            number: pr.number,
+            title: pr.title,
+            state: pr.state,
+            is_draft: pr.draft,
+            author_login: pr.user.map(|u| u.login),
+            head_sha: pr.head.sha,
+            base_ref: pr.base.r#ref,
+            commits_count: pr.commits,
+            changed_files_count: pr.changed_files,
+            additions: pr.additions,
+            deletions: pr.deletions,
+            review_states,
+            checks_summary: checks_opt,
+            files: files_opt,
+        };
+        (
+            Some(item),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: pr_resp.meta.rate,
+            },
+            None,
+        )
+    });
+    let out = serde_json::to_value(Output {
+        item,
+        meta,
+        error: err,
+    })
+    .unwrap();
+    let text = Some("pr summary".to_string());
+    let is_error = out
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
+    let wrapped = mcp_wrap(out, text, is_error);
+    rpc_ok(id, wrapped)
+}
+
+// Placeholder implementations for new tools; will be implemented next
+fn handle_list_commits(id: Option<Id>, params: Value) -> Response {
+    let input: ListCommitsInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let Ok(limit) = enforce_limit(input.limit) else {
+        return rpc_error(id, -32602, "Invalid limit (1..=100)", None);
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (items, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        // Start at page per cursor or default 1
+        let (page, per_page, cur) = page_per_from_cursor(input.cursor, Some(limit));
+        let mut path = format!(
+            "/repos/{}/{}/commits?per_page={}&page={}",
+            input.owner, input.repo, per_page, page
+        );
+        if let Some(sha) = input.sha {
+            path.push_str(&format!("&sha={}", sha));
+        }
+        if let Some(p) = input.path {
+            path.push_str(&format!("&path={}", http::encode_path_segment(&p)));
+        }
+        if let Some(a) = input.author {
+            path.push_str(&format!("&author={}", a));
+        }
+        if let Some(s) = input.since {
+            path.push_str(&format!("&since={}", s));
+        }
+        if let Some(u) = input.until {
+            path.push_str(&format!("&until={}", u));
+        }
+        #[derive(Deserialize)]
+        struct User {
+            login: String,
+        }
+        #[derive(Deserialize)]
+        struct CommitUser {
+            #[allow(dead_code)]
+            name: Option<String>,
+            #[allow(dead_code)]
+            email: Option<String>,
+            date: Option<String>,
+        }
+        #[derive(Deserialize)]
+        struct CommitObj {
+            message: String,
+            author: Option<CommitUser>,
+        }
+        #[derive(Deserialize)]
+        struct RestCommit {
+            sha: String,
+            commit: CommitObj,
+            author: Option<User>,
+            committer: Option<User>,
+            #[allow(dead_code)]
+            parents: Option<Vec<Parent>>,
+            stats: Option<Stats>,
+        }
+        #[derive(Deserialize)]
+        struct Parent {
+            #[allow(dead_code)]
+            sha: String,
+        }
+        #[derive(Deserialize)]
+        struct Stats {
+            additions: i64,
+            deletions: i64,
+            total: i64,
+        }
+        let resp = http::rest_get_json::<Vec<RestCommit>>(&client, &cfg, &path).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let rate = resp.meta.rate;
+        let include_author = input.include_author.unwrap_or(false);
+        let include_stats = input.include_stats.unwrap_or(false);
+        let items = resp.value.map(|v| {
+            v.into_iter()
+                .map(|c| ListCommitsItem {
+                    sha: c.sha,
+                    title: c.commit.message.lines().next().unwrap_or("").to_string(),
+                    authored_at: c.commit.author.and_then(|a| a.date),
+                    author_login: if include_author {
+                        c.author.map(|u| u.login)
+                    } else {
+                        None
+                    },
+                    committer_login: if include_author {
+                        c.committer.map(|u| u.login)
+                    } else {
+                        None
+                    },
+                    stats: if include_stats {
+                        c.stats.map(|s| CommitStats {
+                            additions: s.additions,
+                            deletions: s.deletions,
+                            total: s.total,
+                        })
+                    } else {
+                        None
+                    },
+                })
+                .collect()
+        });
+        let has_more = resp
+            .headers
+            .as_ref()
+            .map(http::has_next_page_from_link)
+            .unwrap_or(false);
+        let next_cursor = if has_more {
+            Some(http::encode_rest_cursor(http::RestCursor {
+                page: cur
+                    .and_then(|c| http::decode_rest_cursor(&c))
+                    .map(|c| c.page)
+                    .unwrap_or(page)
+                    + 1,
+                per_page,
+                path: None,
+            }))
+        } else {
+            None
+        };
+        (
+            items,
+            Meta {
+                next_cursor,
+                has_more,
+                rate,
+            },
+            None,
+        )
+    });
+    let out = ListCommitsOutput {
+        items,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(|v| format!("{} commits", v.len()));
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_get_commit(id: Option<Id>, params: Value) -> Response {
+    let input: GetCommitInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        let path = format!(
+            "/repos/{}/{}/commits/{}",
+            input.owner, input.repo, input.r#ref
+        );
+        #[derive(Deserialize)]
+        struct User {
+            login: String,
+        }
+        #[derive(Deserialize)]
+        struct CommitUser {
+            #[allow(dead_code)]
+            name: Option<String>,
+            #[allow(dead_code)]
+            email: Option<String>,
+            date: Option<String>,
+        }
+        #[derive(Deserialize)]
+        struct CommitObj {
+            message: String,
+            author: Option<CommitUser>,
+        }
+        #[derive(Deserialize)]
+        struct File {
+            filename: String,
+            status: String,
+            additions: i64,
+            deletions: i64,
+            changes: i64,
+            patch: Option<String>,
+        }
+        #[derive(Deserialize)]
+        struct Parent {
+            sha: String,
+        }
+        #[derive(Deserialize)]
+        struct Stats {
+            additions: i64,
+            deletions: i64,
+            total: i64,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            sha: String,
+            commit: CommitObj,
+            author: Option<User>,
+            committer: Option<User>,
+            parents: Vec<Parent>,
+            stats: Option<Stats>,
+            files: Option<Vec<File>>,
+        }
+        let resp = http::rest_get_json::<Resp>(&client, &cfg, &path).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let r = resp.value.unwrap();
+        let include_stats = input.include_stats.unwrap_or(true);
+        let include_files = input.include_files.unwrap_or(false);
+        let item = GetCommitItem {
+            sha: r.sha,
+            message: r.commit.message,
+            authored_at: r.commit.author.and_then(|a| a.date),
+            author_login: r.author.map(|u| u.login),
+            committer_login: r.committer.map(|u| u.login),
+            parents: r
+                .parents
+                .into_iter()
+                .map(|p| CommitParent { sha: p.sha })
+                .collect(),
+            stats: if include_stats {
+                r.stats.map(|s| CommitStats {
+                    additions: s.additions,
+                    deletions: s.deletions,
+                    total: s.total,
+                })
+            } else {
+                None
+            },
+            files: if include_files {
+                r.files.map(|v| {
+                    v.into_iter()
+                        .map(|f| CommitFile {
+                            filename: f.filename,
+                            status: f.status,
+                            additions: f.additions,
+                            deletions: f.deletions,
+                            changes: f.changes,
+                            patch: f.patch,
+                        })
+                        .collect()
+                })
+            } else {
+                None
+            },
+        };
+        (
+            Some(item),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
+    });
+    let out = GetCommitOutput {
+        item,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("item")
+        .and_then(|v| if v.is_null() { None } else { Some(()) })
+        .map(|_| "commit".to_string());
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+fn handle_list_tags(id: Option<Id>, params: Value) -> Response {
+    let input: ListTagsInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let Ok(limit) = enforce_limit(input.limit) else {
+        return rpc_error(id, -32602, "Invalid limit (1..=100)", None);
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (items, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        let (page, per_page, _cur) = page_per_from_cursor(input.cursor, Some(limit));
+        let path = format!(
+            "/repos/{}/{}/tags?per_page={}&page={}",
+            input.owner, input.repo, per_page, page
+        );
+        #[derive(Deserialize)]
+        struct Tag {
+            name: String,
+            commit: CommitRef,
+            zipball_url: String,
+            tarball_url: String,
+        }
+        #[derive(Deserialize)]
+        struct CommitRef {
+            sha: String,
+            #[allow(dead_code)]
+            url: String,
+        }
+        let resp = http::rest_get_json::<Vec<Tag>>(&client, &cfg, &path).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let mut items: Vec<TagItem> = Vec::new();
+        if let Some(arr) = resp.value {
+            for t in arr {
+                let ti = TagItem {
+                    name: t.name,
+                    commit_sha: t.commit.sha,
+                    zipball_url: t.zipball_url,
+                    tarball_url: t.tarball_url,
+                    r#type: "lightweight".into(),
+                    tagger: None,
+                    message: None,
+                };
+                items.push(ti);
+            }
+        }
+        let has_more = resp
+            .headers
+            .as_ref()
+            .map(http::has_next_page_from_link)
+            .unwrap_or(false);
+        let next_cursor = if has_more {
+            Some(http::encode_rest_cursor(http::RestCursor {
+                page: page + 1,
+                per_page,
+                path: None,
+            }))
+        } else {
+            None
+        };
+        (
+            Some(items),
+            Meta {
+                next_cursor,
+                has_more,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
+    });
+    let out = ListTagsOutput {
+        items,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(|v| format!("{} tags", v.len()));
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+fn handle_get_tag(id: Option<Id>, params: Value) -> Response {
+    let input: GetTagInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        let tag_enc = http::encode_path_segment(&input.tag);
+        #[derive(Deserialize)]
+        struct RefResp {
+            object: Obj,
+        }
+        #[derive(Deserialize)]
+        struct Obj {
+            r#type: String,
+            sha: String,
+        }
+        let ref_path = format!(
+            "/repos/{}/{}/git/ref/tags/{}",
+            input.owner, input.repo, tag_enc
+        );
+        let ref_resp = http::rest_get_json::<RefResp>(&client, &cfg, &ref_path).await;
+        if let Some(err) = ref_resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: ref_resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let obj = ref_resp.value.unwrap().object;
+        if obj.r#type == "tag" && input.resolve_annotated.unwrap_or(true) {
+            #[derive(Deserialize)]
+            struct TagObj {
+                tag: String,
+                message: Option<String>,
+                tagger: Option<Tagger>,
+                object: Obj2,
+            }
+            #[derive(Deserialize)]
+            struct Tagger {
+                name: Option<String>,
+            }
+            #[derive(Deserialize)]
+            struct Obj2 {
+                sha: String,
+            }
+            let path = format!("/repos/{}/{}/git/tags/{}", input.owner, input.repo, obj.sha);
+            let resp = http::rest_get_json::<TagObj>(&client, &cfg, &path).await;
+            if let Some(err) = resp.error {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: resp.meta.rate,
+                    },
+                    Some(ErrorShape {
+                        code: err.code,
+                        message: err.message,
+                        retriable: err.retriable,
+                    }),
+                );
+            }
+            let t = resp.value.unwrap();
+            let item = GetTagItem {
+                name: t.tag,
+                commit_sha: t.object.sha,
+                r#type: "annotated".into(),
+                tagger: t.tagger.and_then(|tg| tg.name),
+                message: t.message,
+            };
+            (
+                Some(item),
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                None,
+            )
+        } else {
+            let item = GetTagItem {
+                name: input.tag,
+                commit_sha: obj.sha,
+                r#type: "lightweight".into(),
+                tagger: None,
+                message: None,
+            };
+            (
+                Some(item),
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: ref_resp.meta.rate,
+                },
+                None,
+            )
+        }
+    });
+    let out = GetTagOutput {
+        item,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = Some("tag".to_string());
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+fn handle_list_branches(id: Option<Id>, params: Value) -> Response {
+    let input: ListBranchesInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let Ok(limit) = enforce_limit(input.limit) else {
+        return rpc_error(id, -32602, "Invalid limit (1..=100)", None);
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (items, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        let (page, per_page, _cur) = page_per_from_cursor(input.cursor, Some(limit));
+        let mut path = format!(
+            "/repos/{}/{}/branches?per_page={}&page={}",
+            input.owner, input.repo, per_page, page
+        );
+        if let Some(p) = input.protected {
+            path.push_str(&format!("&protected={}", if p { "true" } else { "false" }));
+        }
+        #[derive(Deserialize)]
+        struct CommitRef {
+            sha: String,
+        }
+        #[derive(Deserialize)]
+        struct Branch {
+            name: String,
+            commit: CommitRef,
+            protected: bool,
+        }
+        let resp = http::rest_get_json::<Vec<Branch>>(&client, &cfg, &path).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let items = resp.value.map(|v| {
+            v.into_iter()
+                .map(|b| BranchItem {
+                    name: b.name,
+                    commit_sha: b.commit.sha,
+                    protected: b.protected,
+                })
+                .collect()
+        });
+        let has_more = resp
+            .headers
+            .as_ref()
+            .map(http::has_next_page_from_link)
+            .unwrap_or(false);
+        let next_cursor = if has_more {
+            Some(http::encode_rest_cursor(http::RestCursor {
+                page: page + 1,
+                per_page,
+                path: None,
+            }))
+        } else {
+            None
+        };
+        (
+            items,
+            Meta {
+                next_cursor,
+                has_more,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
+    });
+    let out = ListBranchesOutput {
+        items,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(|v| format!("{} branches", v.len()));
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+fn handle_list_releases(id: Option<Id>, params: Value) -> Response {
+    let input: ListReleasesInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let Ok(limit) = enforce_limit(input.limit) else {
+        return rpc_error(id, -32602, "Invalid limit (1..=100)", None);
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (items, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        let (page, per_page, _cur) = page_per_from_cursor(input.cursor, Some(limit));
+        let path = format!(
+            "/repos/{}/{}/releases?per_page={}&page={}",
+            input.owner, input.repo, per_page, page
+        );
+        #[derive(Deserialize)]
+        struct User {
+            login: String,
+        }
+        #[derive(Deserialize)]
+        struct Rel {
+            id: i64,
+            tag_name: String,
+            name: Option<String>,
+            draft: bool,
+            prerelease: bool,
+            created_at: Option<String>,
+            published_at: Option<String>,
+            author: Option<User>,
+            assets: Vec<serde_json::Value>,
+        }
+        let resp = http::rest_get_json::<Vec<Rel>>(&client, &cfg, &path).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let items = resp.value.map(|v| {
+            v.into_iter()
+                .map(|r| ReleaseItem {
+                    id: r.id,
+                    tag_name: r.tag_name,
+                    name: r.name,
+                    draft: r.draft,
+                    prerelease: r.prerelease,
+                    created_at: r.created_at,
+                    published_at: r.published_at,
+                    author_login: r.author.map(|u| u.login),
+                    assets_count: r.assets.len() as i64,
+                })
+                .collect()
+        });
+        let has_more = resp
+            .headers
+            .as_ref()
+            .map(http::has_next_page_from_link)
+            .unwrap_or(false);
+        let next_cursor = if has_more {
+            Some(http::encode_rest_cursor(http::RestCursor {
+                page: page + 1,
+                per_page,
+                path: None,
+            }))
+        } else {
+            None
+        };
+        (
+            items,
+            Meta {
+                next_cursor,
+                has_more,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
+    });
+    let out = ListReleasesOutput {
+        items,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(|v| format!("{} releases", v.len()));
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+fn handle_get_release(id: Option<Id>, params: Value) -> Response {
+    let input: GetReleaseInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        #[derive(Deserialize)]
+        struct User {
+            login: String,
+        }
+        #[derive(Deserialize)]
+        struct Asset {
+            id: i64,
+            name: String,
+            content_type: String,
+            size: i64,
+            download_count: i64,
+            browser_download_url: String,
+        }
+        #[derive(Deserialize)]
+        struct Rel {
+            id: i64,
+            tag_name: String,
+            name: Option<String>,
+            draft: bool,
+            prerelease: bool,
+            created_at: Option<String>,
+            published_at: Option<String>,
+            body: Option<String>,
+            author: Option<User>,
+            assets: Vec<Asset>,
+        }
+        let path = if let Some(idv) = input.release_id {
+            format!("/repos/{}/{}/releases/{}", input.owner, input.repo, idv)
+        } else if let Some(tag) = input.tag {
+            let tagenc = http::encode_path_segment(&tag);
+            format!(
+                "/repos/{}/{}/releases/tags/{}",
+                input.owner, input.repo, tagenc
+            )
+        } else {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: None,
+                },
+                Some(ErrorShape {
+                    code: "invalid_params".into(),
+                    message: "Provide release_id or tag".into(),
+                    retriable: false,
+                }),
+            );
+        };
+        let resp = http::rest_get_json::<Rel>(&client, &cfg, &path).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let r = resp.value.unwrap();
+        let assets = r
+            .assets
+            .into_iter()
+            .map(|a| ReleaseAsset {
+                id: a.id,
+                name: a.name,
+                content_type: a.content_type,
+                size: a.size,
+                download_count: a.download_count,
+                browser_download_url: a.browser_download_url,
+            })
+            .collect();
+        let item = GetReleaseItem {
+            id: r.id,
+            tag_name: r.tag_name,
+            name: r.name,
+            draft: r.draft,
+            prerelease: r.prerelease,
+            created_at: r.created_at,
+            published_at: r.published_at,
+            body: r.body,
+            author_login: r.author.map(|u| u.login),
+            assets,
+        };
+        (
+            Some(item),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
+    });
+    let out = GetReleaseOutput {
+        item,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = Some("release".to_string());
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+fn handle_list_starred_repositories(id: Option<Id>, params: Value) -> Response {
+    let input: ListStarredReposInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let Ok(limit) = enforce_limit(input.limit) else {
+        return rpc_error(id, -32602, "Invalid limit (1..=100)", None);
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (items, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        let (page, per_page, _cur) = page_per_from_cursor(input.cursor, Some(limit));
+        let sort = input.sort.unwrap_or_else(|| "created".into());
+        let direction = input.direction.unwrap_or_else(|| "desc".into());
+        let accept = if input.include_starred_at.unwrap_or(false) {
+            "application/vnd.github.star+json"
+        } else {
+            "application/vnd.github+json"
+        };
+        let path = format!(
+            "/user/starred?per_page={}&page={}&sort={}&direction={}",
+            per_page, page, sort, direction
+        );
+        #[derive(Deserialize)]
+        struct Owner {
+            #[allow(dead_code)]
+            login: String,
+        }
+        #[derive(Deserialize)]
+        struct Repo {
+            full_name: String,
+            private: bool,
+            description: Option<String>,
+            language: Option<String>,
+            stargazers_count: i64,
+            html_url: String,
+            #[allow(dead_code)]
+            owner: Owner,
+        }
+        #[derive(Deserialize)]
+        struct Starred {
+            starred_at: Option<String>,
+            repo: Repo,
+        }
+        let starred_at = input.include_starred_at.unwrap_or(false);
+        if starred_at {
+            let resp =
+                http::rest_get_json_with_accept::<Vec<Starred>>(&client, &cfg, &path, accept).await;
+            if let Some(err) = resp.error {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: resp.meta.rate,
+                    },
+                    Some(ErrorShape {
+                        code: err.code,
+                        message: err.message,
+                        retriable: err.retriable,
+                    }),
+                );
+            }
+            let items = resp.value.map(|v| {
+                v.into_iter()
+                    .map(|s| StarredRepoItem {
+                        full_name: s.repo.full_name,
+                        private: s.repo.private,
+                        description: s.repo.description,
+                        language: s.repo.language,
+                        stargazers_count: s.repo.stargazers_count,
+                        html_url: s.repo.html_url,
+                        starred_at: s.starred_at,
+                    })
+                    .collect()
+            });
+            let has_more = resp
+                .headers
+                .as_ref()
+                .map(http::has_next_page_from_link)
+                .unwrap_or(false);
+            let next_cursor = if has_more {
+                Some(http::encode_rest_cursor(http::RestCursor {
+                    page: page + 1,
+                    per_page,
+                    path: None,
+                }))
+            } else {
+                None
+            };
+            (
+                items,
+                Meta {
+                    next_cursor,
+                    has_more,
+                    rate: resp.meta.rate,
+                },
+                None,
+            )
+        } else {
+            let resp = http::rest_get_json::<Vec<Repo>>(&client, &cfg, &path).await;
+            if let Some(err) = resp.error {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: resp.meta.rate,
+                    },
+                    Some(ErrorShape {
+                        code: err.code,
+                        message: err.message,
+                        retriable: err.retriable,
+                    }),
+                );
+            }
+            let items = resp.value.map(|v| {
+                v.into_iter()
+                    .map(|r| StarredRepoItem {
+                        full_name: r.full_name,
+                        private: r.private,
+                        description: r.description,
+                        language: r.language,
+                        stargazers_count: r.stargazers_count,
+                        html_url: r.html_url,
+                        starred_at: None,
+                    })
+                    .collect()
+            });
+            let has_more = resp
+                .headers
+                .as_ref()
+                .map(http::has_next_page_from_link)
+                .unwrap_or(false);
+            let next_cursor = if has_more {
+                Some(http::encode_rest_cursor(http::RestCursor {
+                    page: page + 1,
+                    per_page,
+                    path: None,
+                }))
+            } else {
+                None
+            };
+            (
+                items,
+                Meta {
+                    next_cursor,
+                    has_more,
+                    rate: resp.meta.rate,
+                },
+                None,
+            )
+        }
+    });
+    let out = ListStarredReposOutput {
+        items,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(|v| format!("{} starred repos", v.len()));
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+fn handle_merge_pr(id: Option<Id>, params: Value) -> Response {
+    let input: MergePrInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        #[derive(Serialize)]
+        struct Body {
+            merge_method: Option<String>,
+            commit_title: Option<String>,
+            commit_message: Option<String>,
+            sha: Option<String>,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            merged: bool,
+            message: String,
+            sha: Option<String>,
+        }
+        let path = format!(
+            "/repos/{}/{}/pulls/{}/merge",
+            input.owner, input.repo, input.number
+        );
+        let req = Body {
+            merge_method: input.merge_method,
+            commit_title: input.commit_title,
+            commit_message: input.commit_message,
+            sha: input.sha,
+        };
+        let resp = http::rest_put_json::<Body, Resp>(&client, &cfg, &path, &req).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let r = resp.value.unwrap();
+        (
+            Some(MergePrResult {
+                merged: r.merged,
+                message: r.message,
+                sha: r.sha,
+            }),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
+    });
+    let out = MergePrOutput {
+        item,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("item")
+        .and_then(|v| v.get("message"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+fn handle_search_issues(id: Option<Id>, params: Value) -> Response {
+    let input: SearchInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let Ok(limit) = enforce_limit(input.limit) else {
+        return rpc_error(id, -32602, "Invalid limit (1..=100)", None);
+    };
+    handle_search_common(id, "issues", input, limit)
+}
+fn handle_search_pull_requests(id: Option<Id>, params: Value) -> Response {
+    let input: SearchInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let Ok(limit) = enforce_limit(input.limit) else {
+        return rpc_error(id, -32602, "Invalid limit (1..=100)", None);
+    };
+    handle_search_common(id, "issues", input, limit) // PRs are part of issues endpoint with type:pr in query
+}
+fn handle_search_repositories(id: Option<Id>, params: Value) -> Response {
+    let input: SearchInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let Ok(limit) = enforce_limit(input.limit) else {
+        return rpc_error(id, -32602, "Invalid limit (1..=100)", None);
+    };
+    handle_search_common(id, "repositories", input, limit)
+}
+
+fn handle_search_common(id: Option<Id>, index: &str, input: SearchInput, limit: u32) -> Response {
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (out_val, text, is_err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { let v = serde_json::json!({"error": {"code":"server_error","message": e.to_string(),"retriable": false}}); return (v, Some("search error".to_string()), true) } };
+        let (page, per_page, _cur) = page_per_from_cursor(input.cursor, Some(limit));
+        let mut path = format!("/search/{}?per_page={}&page={}&q={}", index, per_page, page, urlencoding::encode(&input.q));
+        if let Some(s) = input.sort { path.push_str(&format!("&sort={}", s)); }
+        if let Some(o) = input.order { path.push_str(&format!("&order={}", o)); }
+        // removed unused RateMetaOnly struct per clippy
+        if index == "repositories" {
+            #[derive(Deserialize)] struct RepoItem { full_name: String, private: bool, description: Option<String>, language: Option<String>, stargazers_count: i64, forks_count: i64, open_issues_count: i64, html_url: String }
+            #[derive(Deserialize)] struct Resp { total_count: i64, incomplete_results: bool, items: Vec<RepoItem> }
+            let resp = http::rest_get_json::<Resp>(&client, &cfg, &path).await;
+            if let Some(err) = resp.error { let v = serde_json::json!({"error": {"code": err.code, "message": err.message, "retriable": err.retriable}}); return (v, Some("search error".into()), true) }
+            let has_more = resp.headers.as_ref().map(http::has_next_page_from_link).unwrap_or(false);
+            let next_cursor = if has_more { Some(http::encode_rest_cursor(http::RestCursor{ page: page+1, per_page, path: None })) } else { None };
+            let val = resp.value.unwrap();
+            let items = val.items.into_iter().map(|r| SearchRepoItem{ full_name: r.full_name, private: r.private, description: r.description, language: r.language, stargazers_count: r.stargazers_count, forks_count: r.forks_count, open_issues_count: r.open_issues_count, html_url: r.html_url }).collect::<Vec<_>>();
+            let out = SearchReposOutput{ items: Some(items), total_count: val.total_count, incomplete_results: val.incomplete_results, meta: Meta{ next_cursor, has_more, rate: resp.meta.rate }, error: None };
+            let val = serde_json::to_value(out).unwrap();
+            (val, Some("search repositories".into()), false)
+        } else {
+            #[derive(Deserialize)] struct User { login: String }
+            #[derive(Deserialize)] struct IssueItem { id: i64, number: i64, title: String, state: String, repository_url: String, user: Option<User>, created_at: String, updated_at: String, pull_request: Option<serde_json::Value> }
+            #[derive(Deserialize)] struct Resp { total_count: i64, incomplete_results: bool, items: Vec<IssueItem> }
+            let resp = http::rest_get_json::<Resp>(&client, &cfg, &path).await;
+            if let Some(err) = resp.error { let v = serde_json::json!({"error": {"code": err.code, "message": err.message, "retriable": err.retriable}}); return (v, Some("search error".into()), true) }
+            let has_more = resp.headers.as_ref().map(http::has_next_page_from_link).unwrap_or(false);
+            let next_cursor = if has_more { Some(http::encode_rest_cursor(http::RestCursor{ page: page+1, per_page, path: None })) } else { None };
+            let val = resp.value.unwrap();
+            let items = val.items.iter().map(|it| SearchIssueItem{ id: it.id, number: it.number, title: it.title.clone(), state: it.state.clone(), repo_full_name: it.repository_url.split("/repos/").nth(1).unwrap_or("").to_string(), is_pull_request: it.pull_request.is_some(), author_login: it.user.as_ref().map(|u| u.login.clone()), created_at: it.created_at.clone(), updated_at: it.updated_at.clone() }).collect::<Vec<_>>();
+            let out = SearchIssuesOutput{ items: Some(items), total_count: val.total_count, incomplete_results: val.incomplete_results, meta: Meta{ next_cursor, has_more, rate: resp.meta.rate }, error: None };
+            let val = serde_json::to_value(out).unwrap();
+            (val, Some("search issues".into()), false)
+        }
+    });
+    let wrapped = mcp_wrap(out_val, text, is_err);
+    rpc_ok(id, wrapped)
+}
+fn handle_update_issue(id: Option<Id>, params: Value) -> Response {
+    let input: UpdateIssueInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        #[derive(Serialize)]
+        struct Body {
+            title: Option<String>,
+            body: Option<String>,
+            labels: Option<Vec<String>>,
+            assignees: Option<Vec<String>>,
+            state: Option<String>,
+            milestone: Option<i64>,
+        }
+        #[derive(Deserialize)]
+        struct User {
+            login: String,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            id: i64,
+            number: i64,
+            title: String,
+            body: Option<String>,
+            state: String,
+            assignees: Vec<User>,
+            labels: Vec<serde_json::Value>,
+            milestone: Option<serde_json::Value>,
+            updated_at: String,
+        }
+        let path = format!(
+            "/repos/{}/{}/issues/{}",
+            input.owner, input.repo, input.number
+        );
+        let body = Body {
+            title: input.title,
+            body: input.body,
+            labels: input.labels,
+            assignees: input.assignees,
+            state: input.state,
+            milestone: input.milestone,
+        };
+        let resp = http::rest_patch_json::<Body, Resp>(&client, &cfg, &path, &body).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let r = resp.value.unwrap();
+        let labels: Vec<String> = r
+            .labels
+            .into_iter()
+            .filter_map(|lv| {
+                lv.get("name")
+                    .and_then(|n| n.as_str())
+                    .map(|s| s.to_string())
+            })
+            .collect();
+        let assignees = r.assignees.into_iter().map(|u| u.login).collect();
+        let milestone = r
+            .milestone
+            .as_ref()
+            .and_then(|m| m.get("number").and_then(|n| n.as_i64()));
+        let item = UpdatedIssueItem {
+            id: r.id,
+            number: r.number,
+            title: r.title,
+            body: r.body,
+            state: r.state,
+            labels,
+            assignees,
+            milestone,
+            updated_at: r.updated_at,
+        };
+        (
+            Some(item),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
+    });
+    let out = UpdateIssueOutput {
+        item,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured.get("item").map(|_| "issue updated".to_string());
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+fn handle_update_pull_request(id: Option<Id>, params: Value) -> Response {
+    let input: UpdatePullRequestInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        #[derive(Serialize)]
+        struct Body {
+            title: Option<String>,
+            body: Option<String>,
+            state: Option<String>,
+            base: Option<String>,
+            maintainer_can_modify: Option<bool>,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            id: i64,
+            number: i64,
+            title: String,
+            body: Option<String>,
+            state: String,
+            draft: bool,
+            base: Base,
+        }
+        #[derive(Deserialize)]
+        struct Base {
+            #[serde(rename = "ref")]
+            r#ref: String,
+        }
+        let path = format!(
+            "/repos/{}/{}/pulls/{}",
+            input.owner, input.repo, input.number
+        );
+        let body = Body {
+            title: input.title,
+            body: input.body,
+            state: input.state,
+            base: input.base,
+            maintainer_can_modify: input.maintainer_can_modify,
+        };
+        let resp = http::rest_patch_json::<Body, Resp>(&client, &cfg, &path, &body).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let r = resp.value.unwrap();
+        let item = UpdatedPrItem {
+            id: r.id,
+            number: r.number,
+            title: r.title,
+            body: r.body,
+            state: r.state,
+            is_draft: r.draft,
+            base_ref: r.base.r#ref,
+        };
+        (
+            Some(item),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
+    });
+    let out = UpdatePullRequestOutput {
+        item,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = Some("pull request updated".to_string());
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
+    let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+fn handle_fork_repository(id: Option<Id>, params: Value) -> Response {
+    let input: ForkRepositoryInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (item, meta, err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        #[derive(Serialize)]
+        struct Body {
+            organization: Option<String>,
+        }
+        #[derive(Deserialize)]
+        struct Owner {
+            login: String,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            full_name: String,
+            owner: Owner,
+            private: bool,
+            html_url: String,
+            parent: Option<Parent>,
+            created_at: String,
+        }
+        #[derive(Deserialize)]
+        struct Parent {
+            full_name: String,
+        }
+        let path = format!("/repos/{}/{}/forks", input.owner, input.repo);
+        let body = Body {
+            organization: input.organization,
+        };
+        let resp = http::rest_post_json::<Body, Resp>(&client, &cfg, &path, &body).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        let r = resp.value.unwrap();
+        let item = ForkRepoItem {
+            full_name: r.full_name,
+            owner_login: r.owner.login,
+            private: r.private,
+            html_url: r.html_url,
+            parent_full_name: r.parent.map(|p| p.full_name),
+            created_at: r.created_at,
+        };
+        (
+            Some(item),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
+    });
+    let out = ForkRepositoryOutput {
+        item,
+        meta,
+        error: err,
+    };
+    let structured = serde_json::to_value(&out).unwrap();
+    let text = structured
+        .get("item")
+        .and_then(|v| v.get("full_name"))
+        .and_then(|v| v.as_str())
+        .map(|s| format!("forked: {}", s));
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
