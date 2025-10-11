@@ -58,7 +58,9 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
                 "owner": {"type": "string"},
                 "repo": {"type": "string"},
                 "number": {"type": "integer"},
-                "include_author": {"type": "boolean"}
+                "include_author": {"type": "boolean"},
+                // WIP scaffolding: accept include=["body"]; currently ignored.
+                "include": {"type": "array", "items": {"type": "string"}}
             },
             "required": ["owner", "repo", "number"]
         }),
@@ -112,7 +114,9 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
                 "owner": {"type": "string"},
                 "repo": {"type": "string"},
                 "number": {"type": "integer"},
-                "include_author": {"type": "boolean"}
+                "include_author": {"type": "boolean"},
+                // WIP scaffolding: accept include=["body"]; currently ignored.
+                "include": {"type": "array", "items": {"type": "string"}}
             },
             "required": ["owner", "repo", "number"]
         }),
@@ -485,9 +489,38 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
         ping,
         list_issues,
         get_issue,
+        // WIP observability overview tools (scaffold)
+        ToolDescriptor {
+            name: "get_issue_overview".into(),
+            description: "WIP: Get a summarized observability overview for an issue".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "owner": {"type": "string"},
+                    "repo": {"type": "string"},
+                    "number": {"type": "integer"}
+                },
+                "required": ["owner", "repo", "number"]
+            }),
+        },
         list_issue_comments_plain,
         list_prs,
         get_pr,
+        ToolDescriptor {
+            name: "get_pull_request_overview".into(),
+            description: "WIP: Get a summarized observability overview for a pull request".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "owner": {"type": "string"},
+                    "repo": {"type": "string"},
+                    "number": {"type": "integer"}
+                },
+                "required": ["owner", "repo", "number"]
+            }),
+        },
         list_pr_comments,
         list_pr_review_comments,
         list_pr_review_comments_unified,
@@ -597,6 +630,8 @@ pub struct GetIssueInput {
     pub repo: String,
     pub number: i64,
     pub include_author: Option<bool>,
+    // WIP: accept include=["body"] without changing behavior yet
+    pub include: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -688,6 +723,8 @@ pub struct GetPullRequestInput {
     pub repo: String,
     pub number: i64,
     pub include_author: Option<bool>,
+    // WIP: accept include=["body"] without changing behavior yet
+    pub include: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]

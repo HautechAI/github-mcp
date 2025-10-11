@@ -6,8 +6,8 @@ Design goals
 - Consistent error meta and pagination across tools.
 
 Tools Index
-- Issues: [list_issues](#tool-list_issues), [get_issue](#tool-get_issue), [list_issue_comments_plain](#tool-list_issue_comments_plain)
-- Pull Requests: [list_pull_requests](#tool-list_pull_requests), [get_pull_request](#tool-get_pull_request), [get_pr_status_summary](#tool-get_pr_status_summary), [list_pr_comments_plain](#tool-list_pr_comments_plain), [list_pr_review_comments_plain](#tool-list_pr_review_comments_plain), [list_pr_review_threads_light](#tool-list_pr_review_threads_light), [resolve_pr_review_thread](#tool-resolve_pr_review_thread), [unresolve_pr_review_thread](#tool-unresolve_pr_review_thread), [list_pr_reviews_light](#tool-list_pr_reviews_light), [list_pr_commits_light](#tool-list_pr_commits_light), [list_pr_files_light](#tool-list_pr_files_light), [get_pr_diff](#tool-get_pr_diff), [get_pr_patch](#tool-get_pr_patch)
+- Issues: [list_issues](#tool-list_issues), [get_issue](#tool-get_issue), [list_issue_comments_plain](#tool-list_issue_comments_plain), [get_issue_overview](#tool-get_issue_overview) (WIP)
+- Pull Requests: [list_pull_requests](#tool-list_pull_requests), [get_pull_request](#tool-get_pull_request), [get_pr_status_summary](#tool-get_pr_status_summary), [list_pr_comments_plain](#tool-list_pr_comments_plain), [list_pr_review_comments_plain](#tool-list_pr_review_comments_plain), [list_pr_review_threads_light](#tool-list_pr_review_threads_light), [resolve_pr_review_thread](#tool-resolve_pr_review_thread), [unresolve_pr_review_thread](#tool-unresolve_pr_review_thread), [list_pr_reviews_light](#tool-list_pr_reviews_light), [list_pr_commits_light](#tool-list_pr_commits_light), [list_pr_files_light](#tool-list_pr_files_light), [get_pr_diff](#tool-get_pr_diff), [get_pr_patch](#tool-get_pr_patch), [get_pull_request_overview](#tool-get_pull_request_overview) (WIP)
 - Workflows: [list_workflows_light](#tool-list_workflows_light), [list_workflow_runs_light](#tool-list_workflow_runs_light), [get_workflow_run_light](#tool-get_workflow_run_light), [list_workflow_jobs_light](#tool-list_workflow_jobs_light), [get_workflow_job_logs](#tool-get_workflow_job_logs), [rerun_workflow_run](#tool-rerun_workflow_run), [rerun_workflow_run_failed](#tool-rerun_workflow_run_failed), [cancel_workflow_run](#tool-cancel_workflow_run)
 - Secrets/Variables/Environments: [list_repo_secrets_light](#tool-list_repo_secrets_light), [list_repo_variables_light](#tool-list_repo_variables_light), [list_environments_light](#tool-list_environments_light), [list_environment_variables_light](#tool-list_environment_variables_light)
 
@@ -129,6 +129,7 @@ Inputs
 | repo | string | yes |  |  |  |
 | number | int | yes |  |  | issue number |
 | include_author | bool | no | false |  | adds author_login when true |
+| include | string[] | no |  |  | WIP; accepts ["body"], currently ignored |
 
 Outputs
 
@@ -268,6 +269,43 @@ Inputs
 | repo | string | yes |  |  |  |
 | number | int | yes |  |  | PR number |
 | include_author | bool | no | false |  | adds author_login when true |
+| include | string[] | no |  |  | WIP; accepts ["body"], currently ignored |
+
+## Tool: get_issue_overview
+Status: WIP — scaffolding only; returns structured MCP error not_implemented.
+
+Purpose
+- Provide a summarized observability overview for an Issue (status, core metrics, recent activity) to help triage and monitoring.
+
+Inputs
+- owner: string (required)
+- repo: string (required)
+- number: integer (required)
+
+Outputs
+- On success (future): summary object with key fields and meta.rate
+- Current WIP: { error: { code: "not_implemented", message: "WIP", retriable: false }, meta: { rate } } wrapped via MCP envelope
+
+API references
+- GitHub GraphQL v4 planned
+
+## Tool: get_pull_request_overview
+Status: WIP — scaffolding only; returns structured MCP error not_implemented.
+
+Purpose
+- Provide a summarized observability overview for a Pull Request (status, checks, mergeability, recent activity) to help triage and monitoring.
+
+Inputs
+- owner: string (required)
+- repo: string (required)
+- number: integer (required)
+
+Outputs
+- On success (future): summary object with key fields and meta.rate
+- Current WIP: { error: { code: "not_implemented", message: "WIP", retriable: false }, meta: { rate } } wrapped via MCP envelope
+
+API references
+- GitHub GraphQL v4 and REST (checks) planned
 
 Outputs
 

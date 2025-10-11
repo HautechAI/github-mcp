@@ -75,7 +75,7 @@ fn get_issue_happy_path() -> anyhow::Result<()> {
     });
     let req = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":1,
-        "params":{"name":"get_issue","arguments": {"owner":"o","repo":"r","number":1,"include_author":true}}
+        "params":{"name":"get_issue","arguments": {"owner":"o","repo":"r","number":1,"include_author":true, "include": ["body"]}}
     });
     let out = run_with_env(
         &req,

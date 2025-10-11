@@ -39,6 +39,9 @@ fn initialize_and_tools_list() -> anyhow::Result<()> {
     // Assert presence of core GitHub tools (names may evolve; keep to read-only basics)
     assert!(out.contains("\"list_issues\""));
     assert!(out.contains("\"get_issue\""));
+    // New WIP overview tools should be listed
+    assert!(out.contains("\"get_issue_overview\""));
+    assert!(out.contains("\"get_pull_request_overview\""));
     // Ensure nextCursor is absent or a string (never null)
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     if let Some(result) = v.get("result") {

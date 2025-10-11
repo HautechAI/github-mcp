@@ -286,6 +286,9 @@ fn handle_tools_call(id: Option<Id>, params: Value) -> Response {
         "get_pr_diff" => handle_get_pr_text(id, args, true),
         "get_pr_patch" => handle_get_pr_text(id, args, false),
         "pr_summary" => handle_pr_summary(id, args),
+        // WIP Observability overview stubs
+        "get_issue_overview" => handle_get_issue_overview(id, args),
+        "get_pull_request_overview" => handle_get_pull_request_overview(id, args),
         "list_workflows_light" => handle_list_workflows(id, args),
         "list_workflow_runs_light" => handle_list_workflow_runs(id, args),
         "get_workflow_run_light" => handle_get_workflow_run(id, args),
@@ -316,6 +319,28 @@ fn handle_tools_call(id: Option<Id>, params: Value) -> Response {
         "fork_repository" => handle_fork_repository(id, args),
         _ => rpc_error(id, -32601, &format!("Tool not found: {}", call.name), None),
     }
+}
+
+fn handle_get_issue_overview(id: Option<Id>, _params: Value) -> Response {
+    // Stub: return a structured MCP error with WIP status. Include meta.rate so clients can observe.
+    let structured = serde_json::json!({
+        "meta": {"has_more": false, "next_cursor": null, "rate": {"remaining": null, "used": null, "reset_at": null}},
+        "error": {"code": "not_implemented", "message": "WIP", "retriable": false}
+    });
+    let text = Some("get_issue_overview: WIP".to_string());
+    let wrapped = mcp_wrap(structured, text, true);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_get_pull_request_overview(id: Option<Id>, _params: Value) -> Response {
+    // Stub: return a structured MCP error with WIP status. Include meta.rate so clients can observe.
+    let structured = serde_json::json!({
+        "meta": {"has_more": false, "next_cursor": null, "rate": {"remaining": null, "used": null, "reset_at": null}},
+        "error": {"code": "not_implemented", "message": "WIP", "retriable": false}
+    });
+    let text = Some("get_pull_request_overview: WIP".to_string());
+    let wrapped = mcp_wrap(structured, text, true);
+    rpc_ok(id, wrapped)
 }
 
 fn handle_ping(id: Option<Id>, params: Value) -> Response {
