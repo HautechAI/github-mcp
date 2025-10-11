@@ -606,6 +606,83 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
         }),
     };
 
+    // Remaining mutations
+    let create_issue = ToolDescriptor {
+        name: "create_issue".into(),
+        description: "Create a new issue".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"title":{"type":"string"},"body":{"type":"string"},"labels":{"type":"array","items":{"type":"string"}},"assignees":{"type":"array","items":{"type":"string"}},"milestone":{"type":"integer"}},
+            "required":["owner","repo","title"]
+        }),
+    };
+    let add_issue_comment = ToolDescriptor {
+        name: "add_issue_comment".into(),
+        description: "Add a comment to an issue".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"},"body":{"type":"string"}},
+            "required":["owner","repo","number","body"]
+        }),
+    };
+    let close_issue = ToolDescriptor {
+        name: "close_issue".into(),
+        description: "Close an issue (state=closed)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"}},
+            "required":["owner","repo","number"]
+        }),
+    };
+    let create_pull_request = ToolDescriptor {
+        name: "create_pull_request".into(),
+        description: "Create a new pull request".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"title":{"type":"string"},"head":{"type":"string"},"base":{"type":"string"},"body":{"type":"string"},"draft":{"type":"boolean"}},
+            "required":["owner","repo","title","head","base"]
+        }),
+    };
+    let close_pull_request = ToolDescriptor {
+        name: "close_pull_request".into(),
+        description: "Close a pull request (state=closed)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"}},
+            "required":["owner","repo","number"]
+        }),
+    };
+
+    // Actions upserts
+    let upsert_repo_variable = ToolDescriptor {
+        name: "upsert_repo_variable".into(),
+        description: "Create or update a repository Actions variable".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"name":{"type":"string"},"value":{"type":"string"}},
+            "required":["owner","repo","name","value"]
+        }),
+    };
+    let upsert_environment_variable = ToolDescriptor {
+        name: "upsert_environment_variable".into(),
+        description: "Create or update an environment-scoped Actions variable".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"environment_name":{"type":"string"},"name":{"type":"string"},"value":{"type":"string"}},
+            "required":["owner","repo","environment_name","name","value"]
+        }),
+    };
+    let upsert_repo_secret = ToolDescriptor {
+        name: "upsert_repo_secret".into(),
+        description: "Create or update a repository secret (encrypts via libsodium sealed box)"
+            .into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties": {"owner":{"type":"string"},"repo":{"type":"string"},"name":{"type":"string"},"value":{"type":"string"}},
+            "required":["owner","repo","name","value"]
+        }),
+    };
+
     vec![
         ping,
         list_issues,
@@ -676,6 +753,14 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
         convert_to_draft,
         merge_pull_request,
         update_pr_branch,
+        create_issue,
+        add_issue_comment,
+        close_issue,
+        create_pull_request,
+        close_pull_request,
+        upsert_repo_variable,
+        upsert_environment_variable,
+        upsert_repo_secret,
         list_repo_secrets_light,
         list_repo_variables_light,
         list_environments_light,

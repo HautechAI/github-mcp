@@ -325,6 +325,16 @@ fn handle_tools_call(id: Option<Id>, params: Value) -> Response {
         "update_issue" => handle_update_issue(id, args),
         "update_pull_request" => handle_update_pull_request(id, args),
         "fork_repository" => handle_fork_repository(id, args),
+        // Remaining mutations
+        "create_issue" => handle_create_issue(id, args),
+        "add_issue_comment" => handle_add_issue_comment(id, args),
+        "close_issue" => handle_close_issue(id, args),
+        "create_pull_request" => handle_create_pull_request(id, args),
+        "close_pull_request" => handle_close_pull_request(id, args),
+        // Actions upserts
+        "upsert_repo_variable" => handle_upsert_repo_variable(id, args),
+        "upsert_environment_variable" => handle_upsert_environment_variable(id, args),
+        "upsert_repo_secret" => handle_upsert_repo_secret(id, args),
         _ => rpc_error(id, -32601, &format!("Tool not found: {}", call.name), None),
     }
 }
@@ -5347,6 +5357,325 @@ fn handle_fork_repository(id: Option<Id>, params: Value) -> Response {
         .map(|e| !e.is_null())
         .unwrap_or(false);
     let wrapped = mcp_wrap(structured, text, is_error);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_create_issue(id: Option<Id>, params: Value) -> Response {
+    #[derive(Deserialize)]
+    struct Input {
+        owner: String,
+        repo: String,
+        title: String,
+        body: Option<String>,
+        labels: Option<Vec<String>>,
+        assignees: Option<Vec<String>>,
+        milestone: Option<i64>,
+    }
+    let input: Input = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (out_val, text, is_err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { let v = serde_json::json!({"error": {"code":"server_error","message": e.to_string(),"retriable": false}, "meta": {"rate": null}}); return (v, Some("create issue failed".to_string()), true) } };
+        #[derive(Serialize)] struct Body { title: String, #[serde(skip_serializing_if="Option::is_none")] body: Option<String>, #[serde(skip_serializing_if="Option::is_none")] labels: Option<Vec<String>>, #[serde(skip_serializing_if="Option::is_none")] assignees: Option<Vec<String>>, #[serde(skip_serializing_if="Option::is_none")] milestone: Option<i64> }
+        #[derive(Deserialize)] struct Resp { id: i64, number: i64, title: String, body: Option<String>, state: String, created_at: String, updated_at: String }
+        let path = format!("/repos/{}/{}/issues", input.owner, input.repo);
+        let req = Body { title: input.title, body: input.body, labels: input.labels, assignees: input.assignees, milestone: input.milestone };
+        let resp = http::rest_post_json::<Body, Resp>(&client, &cfg, &path, &req).await;
+        if let Some(err) = resp.error { let v = serde_json::json!({"error": {"code": err.code, "message": err.message, "retriable": err.retriable}, "meta": {"rate": resp.meta.rate}}); return (v, Some("create issue error".into()), true) }
+        let r = resp.value.unwrap();
+        let out = serde_json::json!({
+            "item": {"id": r.id, "number": r.number, "title": r.title, "body": r.body, "state": r.state, "created_at": r.created_at, "updated_at": r.updated_at},
+            "meta": {"next_cursor": null, "has_more": false, "rate": resp.meta.rate},
+            "error": null
+        });
+        (out, Some("issue created".into()), false)
+    });
+    let wrapped = mcp_wrap(out_val, text, is_err);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_add_issue_comment(id: Option<Id>, params: Value) -> Response {
+    #[derive(Deserialize)]
+    struct Input {
+        owner: String,
+        repo: String,
+        number: i64,
+        body: String,
+    }
+    let input: Input = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (out_val, text, is_err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { let v = serde_json::json!({"error": {"code":"server_error","message": e.to_string(),"retriable": false}}); return (v, Some("add issue comment failed".to_string()), true) } };
+        #[derive(Serialize)] struct Body { body: String }
+        #[derive(Deserialize)] struct Resp { id: i64, body: String, created_at: String }
+        let path = format!("/repos/{}/{}/issues/{}/comments", input.owner, input.repo, input.number);
+        let req = Body { body: input.body };
+        let resp = http::rest_post_json::<Body, Resp>(&client, &cfg, &path, &req).await;
+        if let Some(err) = resp.error { let v = serde_json::json!({"error": {"code": err.code, "message": err.message, "retriable": err.retriable}, "meta": {"rate": resp.meta.rate}}); return (v, Some("add issue comment error".into()), true) }
+        let r = resp.value.unwrap();
+        let out = serde_json::json!({
+            "item": {"id": r.id.to_string(), "body": r.body, "created_at": r.created_at},
+            "meta": {"next_cursor": null, "has_more": false, "rate": resp.meta.rate},
+            "error": null
+        });
+        (out, Some("issue comment added".into()), false)
+    });
+    let wrapped = mcp_wrap(out_val, text, is_err);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_close_issue(id: Option<Id>, params: Value) -> Response {
+    #[derive(Deserialize)]
+    struct Input {
+        owner: String,
+        repo: String,
+        number: i64,
+    }
+    let input: Input = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (out_val, text, is_err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { let v = serde_json::json!({"error": {"code":"server_error","message": e.to_string(),"retriable": false}}); return (v, Some("close issue failed".to_string()), true) } };
+        #[derive(Serialize)] struct Body { state: &'static str }
+        #[derive(Deserialize)] struct Resp { id: i64, number: i64, state: String, updated_at: String }
+        let path = format!("/repos/{}/{}/issues/{}", input.owner, input.repo, input.number);
+        let req = Body { state: "closed" };
+        let resp = http::rest_patch_json::<Body, Resp>(&client, &cfg, &path, &req).await;
+        if let Some(err) = resp.error { let v = serde_json::json!({"error": {"code": err.code, "message": err.message, "retriable": err.retriable}, "meta": {"rate": resp.meta.rate}}); return (v, Some("close issue error".into()), true) }
+        let r = resp.value.unwrap();
+        let out = serde_json::json!({
+            "item": {"id": r.id, "number": r.number, "state": r.state, "updated_at": r.updated_at},
+            "meta": {"next_cursor": null, "has_more": false, "rate": resp.meta.rate},
+            "error": null
+        });
+        (out, Some("issue closed".into()), false)
+    });
+    let wrapped = mcp_wrap(out_val, text, is_err);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_create_pull_request(id: Option<Id>, params: Value) -> Response {
+    #[derive(Deserialize)]
+    struct Input {
+        owner: String,
+        repo: String,
+        title: String,
+        head: String,
+        base: String,
+        body: Option<String>,
+        draft: Option<bool>,
+    }
+    let input: Input = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (out_val, text, is_err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { let v = serde_json::json!({"error": {"code":"server_error","message": e.to_string(),"retriable": false}}); return (v, Some("create PR failed".to_string()), true) } };
+        #[derive(Serialize)] struct Body { title: String, head: String, base: String, #[serde(skip_serializing_if="Option::is_none")] body: Option<String>, #[serde(skip_serializing_if="Option::is_none")] draft: Option<bool> }
+        #[derive(Deserialize)] struct Resp { id: i64, number: i64, title: String, body: Option<String>, state: String, draft: bool, created_at: Option<String> }
+        let path = format!("/repos/{}/{}/pulls", input.owner, input.repo);
+        let req = Body { title: input.title, head: input.head, base: input.base, body: input.body, draft: input.draft };
+        let resp = http::rest_post_json::<Body, Resp>(&client, &cfg, &path, &req).await;
+        if let Some(err) = resp.error { let v = serde_json::json!({"error": {"code": err.code, "message": err.message, "retriable": err.retriable}, "meta": {"rate": resp.meta.rate}}); return (v, Some("create PR error".into()), true) }
+        let r = resp.value.unwrap();
+        let out = serde_json::json!({
+            "item": {"id": r.id, "number": r.number, "title": r.title, "body": r.body, "state": r.state, "is_draft": r.draft, "created_at": r.created_at},
+            "meta": {"next_cursor": null, "has_more": false, "rate": resp.meta.rate},
+            "error": null
+        });
+        (out, Some("pull request created".into()), false)
+    });
+    let wrapped = mcp_wrap(out_val, text, is_err);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_close_pull_request(id: Option<Id>, params: Value) -> Response {
+    #[derive(Deserialize)]
+    struct Input {
+        owner: String,
+        repo: String,
+        number: i64,
+    }
+    let input: Input = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (out_val, text, is_err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { let v = serde_json::json!({"error": {"code":"server_error","message": e.to_string(),"retriable": false}}); return (v, Some("close PR failed".to_string()), true) } };
+        #[derive(Serialize)] struct Body { state: &'static str }
+        #[derive(Deserialize)] struct Resp { id: i64, number: i64, state: String, updated_at: String }
+        let path = format!("/repos/{}/{}/pulls/{}", input.owner, input.repo, input.number);
+        let req = Body { state: "closed" };
+        let resp = http::rest_patch_json::<Body, Resp>(&client, &cfg, &path, &req).await;
+        if let Some(err) = resp.error { let v = serde_json::json!({"error": {"code": err.code, "message": err.message, "retriable": err.retriable}, "meta": {"rate": resp.meta.rate}}); return (v, Some("close PR error".into()), true) }
+        let r = resp.value.unwrap();
+        let out = serde_json::json!({
+            "item": {"id": r.id, "number": r.number, "state": r.state, "updated_at": r.updated_at},
+            "meta": {"next_cursor": null, "has_more": false, "rate": resp.meta.rate},
+            "error": null
+        });
+        (out, Some("pull request closed".into()), false)
+    });
+    let wrapped = mcp_wrap(out_val, text, is_err);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_upsert_repo_variable(id: Option<Id>, params: Value) -> Response {
+    #[derive(Deserialize)]
+    struct Input {
+        owner: String,
+        repo: String,
+        name: String,
+        value: String,
+    }
+    let input: Input = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (out_val, text, is_err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { let v = serde_json::json!({"error": {"code":"server_error","message": e.to_string(),"retriable": false}}); return (v, Some("upsert repo variable failed".to_string()), true) } };
+        #[derive(Serialize)] struct Body { name: String, value: String }
+        #[derive(Deserialize)] struct Resp { name: String, value: Option<String>, updated_at: Option<String> }
+        let base = format!("/repos/{}/{}/actions/variables/{}", input.owner, input.repo, http::encode_path_segment(&input.name));
+        // Try PATCH update first
+        let patch = http::rest_patch_json::<Body, Resp>(&client, &cfg, &base, &Body{ name: input.name.clone(), value: input.value.clone() }).await;
+        let (val, rate, err) = if patch.status == reqwest::StatusCode::NOT_FOUND {
+            // Create
+            let path = format!("/repos/{}/{}/actions/variables", input.owner, input.repo);
+            let post = http::rest_post_json::<Body, Resp>(&client, &cfg, &path, &Body{ name: input.name.clone(), value: input.value.clone() }).await;
+            (post.value, post.meta.rate, post.error)
+        } else { (patch.value, patch.meta.rate, patch.error) };
+        if let Some(err) = err { let v = serde_json::json!({"error": {"code": err.code, "message": err.message, "retriable": err.retriable}, "meta": {"rate": rate}}); return (v, Some("upsert repo variable error".into()), true) }
+        let out = serde_json::json!({"item": {"name": input.name}, "meta": {"next_cursor": null, "has_more": false, "rate": rate}, "error": null});
+        (out, Some("repo variable upserted".into()), false)
+    });
+    let wrapped = mcp_wrap(out_val, text, is_err);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_upsert_environment_variable(id: Option<Id>, params: Value) -> Response {
+    #[derive(Deserialize)]
+    struct Input {
+        owner: String,
+        repo: String,
+        environment_name: String,
+        name: String,
+        value: String,
+    }
+    let input: Input = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (out_val, text, is_err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { let v = serde_json::json!({"error": {"code":"server_error","message": e.to_string(),"retriable": false}}); return (v, Some("upsert env variable failed".to_string()), true) } };
+        // Resolve repository_id
+        #[derive(Deserialize)] struct Repo { id: i64 }
+        let repo_path = format!("/repos/{}/{}", input.owner, input.repo);
+        let repo_resp = http::rest_get_json::<Repo>(&client, &cfg, &repo_path).await;
+        if let Some(err) = repo_resp.error { let v = serde_json::json!({"error": {"code": err.code, "message": err.message, "retriable": err.retriable}, "meta": {"rate": repo_resp.meta.rate}}); return (v, Some("resolve repo id error".into()), true) }
+        let repo_id = repo_resp.value.unwrap().id;
+        // PATCH then POST
+        #[derive(Serialize)] struct Body { name: String, value: String }
+        #[derive(Deserialize)] struct Resp { name: String, value: Option<String>, updated_at: Option<String> }
+        let base = format!("/repositories/{}/environments/{}/variables/{}", repo_id, http::encode_path_segment(&input.environment_name), http::encode_path_segment(&input.name));
+        let patch = http::rest_patch_json::<Body, Resp>(&client, &cfg, &base, &Body{ name: input.name.clone(), value: input.value.clone() }).await;
+        let (rate, err) = if patch.status == reqwest::StatusCode::NOT_FOUND {
+            let path = format!("/repositories/{}/environments/{}/variables", repo_id, http::encode_path_segment(&input.environment_name));
+            let post = http::rest_post_json::<Body, Resp>(&client, &cfg, &path, &Body{ name: input.name.clone(), value: input.value.clone() }).await;
+            (post.meta.rate, post.error)
+        } else { (patch.meta.rate, patch.error) };
+        if let Some(err) = err { let v = serde_json::json!({"error": {"code": err.code, "message": err.message, "retriable": err.retriable}, "meta": {"rate": rate}}); return (v, Some("upsert env variable error".into()), true) }
+        let out = serde_json::json!({"item": {"name": input.name}, "meta": {"next_cursor": null, "has_more": false, "rate": rate}, "error": null});
+        (out, Some("env variable upserted".into()), false)
+    });
+    let wrapped = mcp_wrap(out_val, text, is_err);
+    rpc_ok(id, wrapped)
+}
+
+fn handle_upsert_repo_secret(id: Option<Id>, params: Value) -> Response {
+    #[derive(Deserialize)]
+    struct Input {
+        owner: String,
+        repo: String,
+        name: String,
+        value: String,
+    }
+    let input: Input = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (out_val, text, is_err) = rt.block_on(async move {
+        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { let v = serde_json::json!({"error": {"code":"server_error","message": e.to_string(),"retriable": false}}); return (v, Some("upsert repo secret failed".to_string()), true) } };
+        // Redact secret value from diagnostics automatically by not logging inputs; ensure envelope contains no secret.
+        // 1) Get public key
+        #[derive(Deserialize)] struct Key { key_id: String, key: String }
+        let path = format!("/repos/{}/{}/actions/secrets/public-key", input.owner, input.repo);
+        let key_resp = http::rest_get_json::<Key>(&client, &cfg, &path).await;
+        if let Some(err) = key_resp.error { let v = serde_json::json!({"error": {"code": err.code, "message": err.message, "retriable": err.retriable}, "meta": {"rate": key_resp.meta.rate}}); return (v, Some("get public key error".into()), true) }
+        let key = key_resp.value.unwrap();
+        // 2) Encrypt using sealed box
+        let encrypted_value = match crate::crypto::encrypt_sealed_box(&input.value, &key.key) {
+            Ok(v) => v,
+            Err(e) => {
+                let v = serde_json::json!({"error": {"code": "encryption_error", "message": e, "retriable": false}, "meta": {"rate": key_resp.meta.rate}});
+                return (v, Some("encryption error".into()), true);
+            }
+        };
+        // 3) PUT secret
+        #[derive(Serialize)] struct Body { encrypted_value: String, key_id: String }
+        #[derive(Deserialize)] struct Resp {}
+        let sec_path = format!("/repos/{}/{}/actions/secrets/{}", input.owner, input.repo, http::encode_path_segment(&input.name));
+        let req = Body { encrypted_value, key_id: key.key_id };
+        let resp = http::rest_put_json::<Body, Resp>(&client, &cfg, &sec_path, &req).await;
+        if let Some(err) = resp.error { let v = serde_json::json!({"error": {"code": err.code, "message": err.message, "retriable": err.retriable}, "meta": {"rate": resp.meta.rate}}); return (v, Some("upsert repo secret error".into()), true) }
+        let out = serde_json::json!({"item": {"name": input.name}, "meta": {"next_cursor": null, "has_more": false, "rate": resp.meta.rate}, "error": null});
+        (out, Some("repo secret upserted".into()), false)
+    });
+    let wrapped = mcp_wrap(out_val, text, is_err);
     rpc_ok(id, wrapped)
 }
 
