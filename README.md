@@ -217,3 +217,8 @@ MCP response envelope (breaking change)
 }
 ```
 - Programmatic clients should switch to reading `result.structuredContent` and treat `result.content[0].text` as a display hint.
+Tools (new highlights)
+- Observability: get_issue_overview, get_pull_request_overview with per-section includes and meta.rate.
+- Mutations (core): request_reviewers, add_pr_comment, add_pr_review_comment_inline, submit_pr_review, mark_pull_request_ready_for_review, convert_pull_request_to_draft, merge_pull_request, update_pr_branch.
+- Mutations (issues/PRs): create_issue, add_issue_comment, close_issue, create_pull_request, close_pull_request.
+- Actions upserts: upsert_repo_variable, upsert_environment_variable, upsert_repo_secret (sealed box encryption).

@@ -107,3 +107,6 @@ All notable changes to this project will be documented in this file by Release P
 
 ## [Unreleased]
 - Initial project bootstrap and CI scaffolding.
+* observability: Issue/PR overview endpoints with per-section includes, pagination, and meta.rate propagation; status_summary normalization; new include=["body"] fetch for get_issue/get_pull_request; GraphQL rateLimit threading.
+* mutations: core review loop + merge tools (request_reviewers, add_pr_comment, add_pr_review_comment_inline, submit_pr_review, mark_pull_request_ready_for_review, convert_pull_request_to_draft, merge_pull_request alias with expected_head_sha, update_pr_branch).
+* mutations: remaining issue/PR create/close, and Actions upserts for variables and secrets (sealed box encryption).

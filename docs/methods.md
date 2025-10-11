@@ -1186,3 +1186,51 @@ Cross-cutting notes
   - Input: owner, repo, number.
   - Output: { item: { message }, meta.rate }
   - API: REST PUT /repos/{owner}/{repo}/pulls/{number}/update-branch
+- create_issue
+  - Purpose: Create a new issue.
+  - Input: owner, repo, title, body?, labels[]?, assignees[]?, milestone?
+  - Output: { item: { id, number, title, body?, state, created_at, updated_at }, meta.rate }
+  - API: REST POST /repos/{owner}/{repo}/issues
+
+- add_issue_comment
+  - Purpose: Add a comment to an issue.
+  - Input: owner, repo, number, body
+  - Output: { item: { id, body, created_at }, meta.rate }
+  - API: REST POST /repos/{owner}/{repo}/issues/{number}/comments
+
+- close_issue
+  - Purpose: Close an issue.
+  - Input: owner, repo, number
+  - Output: { item: { id, number, state, updated_at }, meta.rate }
+  - API: REST PATCH /repos/{owner}/{repo}/issues/{number} (state=closed)
+
+- create_pull_request
+  - Purpose: Create a pull request.
+  - Input: owner, repo, title, head, base, body?, draft?
+  - Output: { item: { id, number, title, body?, state, is_draft, created_at? }, meta.rate }
+  - API: REST POST /repos/{owner}/{repo}/pulls
+
+- close_pull_request
+  - Purpose: Close a pull request.
+  - Input: owner, repo, number
+  - Output: { item: { id, number, state, updated_at }, meta.rate }
+  - API: REST PATCH /repos/{owner}/{repo}/pulls/{number} (state=closed)
+
+- upsert_repo_variable
+  - Purpose: Create or update a repository Actions variable.
+  - Input: owner, repo, name, value
+  - Output: { item: { name }, meta.rate }
+  - API: PATCH /repos/{owner}/{repo}/actions/variables/{name}; fallback POST /repos/{owner}/{repo}/actions/variables
+
+- upsert_environment_variable
+  - Purpose: Create or update an environment-scoped Actions variable.
+  - Input: owner, repo, environment_name, name, value
+  - Output: { item: { name }, meta.rate }
+  - API: Resolve repository_id; PATCH /repositories/{id}/environments/{environment_name}/variables/{name}; fallback POST .../variables
+
+- upsert_repo_secret
+  - Purpose: Create or update a repository secret with encryption.
+  - Input: owner, repo, name, value
+  - Output: { item: { name }, meta.rate }
+  - API: GET /repos/{owner}/{repo}/actions/secrets/public-key; libsodium sealed box encrypt; PUT /repos/{owner}/{repo}/actions/secrets/{name}
+  - Notes: secret values are redacted from diagnostics and not echoed in outputs.
