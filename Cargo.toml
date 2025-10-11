@@ -24,6 +24,7 @@ uuid = { version = "1.8", features = ["v4", "serde"] }
 # HTTP stack for REST/GraphQL clients (to be wired in later milestones)
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip", "brotli", "deflate", "stream"] }
 url = "2.5"
+urlencoding = "2.1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 base64 = { version = "0.22", default-features = false, features = ["alloc"] }
 fastrand = "2.1"
