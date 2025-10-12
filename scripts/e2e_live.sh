@@ -114,6 +114,30 @@ NODE
   fi
 }
 
+# Send a pre-built helper command JSON (shape: {method, params}) directly to the session
+session_send_cmd() {
+  local cmd_json="$1"; shift
+  local out_var="$1"; shift || true
+  local req_out_path="${1:-}"; shift || true
+  if [ -n "$req_out_path" ]; then
+    printf '%s' "$cmd_json" > "$req_out_path"
+  fi
+  if ! printf '%s\n' "$cmd_json" >&${SESSION_IN_FD}; then
+    echo "[e2e][fatal] failed to write raw cmd to session" | tee -a "$LOG" >&2
+    return 1
+  fi
+  local line
+  if ! IFS= read -r -t 30 line <&${SESSION_OUT_FD}; then
+    echo "[e2e][fatal] timeout/no response for raw cmd" | tee -a "$LOG" >&2
+    return 1
+  fi
+  if [ -n "$out_var" ]; then
+    printf -v "$out_var" '%s' "$line"
+  else
+    echo "$line"
+  fi
+}
+
 save_json() {
   local path="$1"; shift
   tee "$path" >/dev/null
@@ -244,20 +268,21 @@ tool_call() {
   local out="$ROOT_DIR/out-${name}.json"
   echo "[e2e] tools/call ${name} ${args_json}" | tee -a "$LOG" >&2
   local resp
-  # Build params for tools/call safely
-  local params
-  params=$(NAME="$name" node - <<'NODE'
+  # Build full helper command for tools/call safely
+  local cmd
+  cmd=$(NAME="$name" node - <<'NODE'
 const fs=require('fs');
 const name = process.env.NAME;
 let data='';
 process.stdin.on('data', d => data += d).on('end', () => {
   let args; try { args = JSON.parse(data && data.trim() ? data : '{}'); } catch { args = {}; }
-  process.stdout.write(JSON.stringify({ name, arguments: args }));
+  const cmd = { method: 'tools/call', params: { name, arguments: args } };
+  process.stdout.write(JSON.stringify(cmd));
 });
 NODE
   <<< "${args_json:-{}}")
   # inspector semantics: tools/call returns {result:{content:[], structuredContent:...}}
-  if ! session_call "tools/call" "$params" resp "$ROOT_DIR/out-req-${name}.json"; then
+  if ! session_send_cmd "$cmd" resp "$ROOT_DIR/out-req-${name}.json"; then
     session_stop; exit 1; fi
   # Log response envelope for debugging and keep legacy filename for downstream asserts
   printf '%s' "$resp" | save_json "$ROOT_DIR/out-resp-${name}.json"
