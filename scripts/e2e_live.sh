@@ -269,7 +269,7 @@ else
 fi
 
 # Issues
-tool_call list_issues "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"limit\":10,\"include_author\":true}"
+tool_call list_issues "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\"}"
 assert_has_field "$ROOT_DIR/out-list_issues.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0"
 
 tool_call get_issue "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$ISSUE_NUM,\"include_author\":true}"
