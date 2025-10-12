@@ -139,6 +139,14 @@ assert_envelope_ok() {
   let obj; try{ obj=JSON.parse(raw);}catch(e){
     console.error(`[assert] not JSON: ${e}`); process.exit(2);
   }
+  // JSON-RPC success: result present; error path handled below.
+  if (obj && obj.error) {
+    const code = obj.error.code;
+    const message = obj.error.message;
+    const data = obj.error.data;
+    console.error(`[assert] tools/call error: code=${code} message=${message} data=${JSON.stringify(data||{})}`);
+    process.exit(6);
+  }
   const res = obj?.result ?? obj; // inspector may include {result:...}
   const content = res?.content;
   const structured = res?.structuredContent;
@@ -243,6 +251,8 @@ NODE
   # inspector semantics: tools/call returns {result:{content:[], structuredContent:...}}
   if ! session_call "tools/call" "$params" resp; then
     session_stop; exit 1; fi
+  # Log response envelope for debugging and keep legacy filename for downstream asserts
+  printf '%s' "$resp" | save_json "$ROOT_DIR/out-resp-${name}.json"
   printf '%s' "$resp" | save_json "$out"
   assert_envelope_ok "$out"
 }
