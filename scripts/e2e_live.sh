@@ -275,7 +275,7 @@ fi
 
 # Issues (dynamic tool/args selection based on descriptors)
 echo "[e2e] resolving list_issues tool and args dynamically" | tee -a "$LOG" >&2
-LI_RES=$(node - "$TOOLS_JSON" <<'NODE'
+LI_RES=$(OWNER="$OWNER" REPO="$REPO" node - "$TOOLS_JSON" <<'NODE'
 const fs=require('fs');
 const path=process.argv[2];
 const raw=fs.readFileSync(path,'utf8');
