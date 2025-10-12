@@ -78,6 +78,7 @@ session_call() {
   local method="$1"; shift
   local params_json="${1:-{}}"; shift || true
   local out_var="$1"; shift || true
+  local req_out_path="${1:-}"; shift || true
   local req
   # Build a single-line JSON-RPC request safely using env vars; fall back to {} for params when invalid/empty.
   req=$(METHOD="$method" PARAMS_JSON="$params_json" node - <<'NODE'
@@ -85,9 +86,15 @@ const m = process.env.METHOD;
 let pj = process.env.PARAMS_JSON || '{}';
 let params;
 try { params = JSON.parse(pj); } catch { params = {}; }
-process.stdout.write(JSON.stringify({ method: m, params }));
+// Build full JSON-RPC request so we can log it exactly.
+const msg = { jsonrpc: '2.0', id: 0, method: m, params };
+process.stdout.write(JSON.stringify(msg));
 NODE
 )
+  # If a req_out_path was provided, log the exact request envelope
+  if [ -n "$req_out_path" ]; then
+    printf '%s' "$req" > "$req_out_path"
+  fi
   # Write request
   if ! printf '%s\n' "$req" >&${SESSION_IN_FD}; then
     echo "[e2e][fatal] failed to write to session (method=$method)" | tee -a "$LOG" >&2
@@ -249,10 +256,8 @@ process.stdin.on('data', d => data += d).on('end', () => {
 });
 NODE
   <<< "${args_json:-{}}")
-  # Log request envelope for debugging
-  printf '%s' "$params" > "$ROOT_DIR/out-req-${name}.json"
   # inspector semantics: tools/call returns {result:{content:[], structuredContent:...}}
-  if ! session_call "tools/call" "$params" resp; then
+  if ! session_call "tools/call" "$params" resp "$ROOT_DIR/out-req-${name}.json"; then
     session_stop; exit 1; fi
   # Log response envelope for debugging and keep legacy filename for downstream asserts
   printf '%s' "$resp" | save_json "$ROOT_DIR/out-resp-${name}.json"
@@ -317,7 +322,14 @@ if [ -z "$LI_NAME" ]; then
   session_stop; exit 1
 fi
 if [ -n "$LI_MISSING" ]; then
-  echo "[e2e] note: required keys missing for $LI_NAME: $LI_MISSING; proceeding with available args" | tee -a "$LOG" >&2
+  echo "[e2e][fatal] required keys missing for $LI_NAME: $LI_MISSING" | tee -a "$LOG" >&2
+  # Log would-be request and exit for debuggability
+  printf '%s' "$(NAME="$LI_NAME" ARGS_JSON="$LI_ARGS" node - <<'NODE'
+const name=process.env.NAME; let aj=process.env.ARGS_JSON||'{}'; let args; try{ args=JSON.parse(aj);}catch{ args={}; }
+process.stdout.write(JSON.stringify({ name, arguments: args }));
+NODE
+)" > "$ROOT_DIR/out-req-${LI_NAME}.json"
+  session_stop; exit 1
 fi
 echo "[e2e] list_issues tool=$LI_NAME args=$LI_ARGS" | tee -a "$LOG" >&2
 tool_call "$LI_NAME" "$LI_ARGS"
