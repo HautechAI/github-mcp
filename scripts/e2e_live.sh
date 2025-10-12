@@ -239,13 +239,16 @@ tool_call() {
   local resp
   # Build params for tools/call safely
   local params
-  params=$(NAME="$name" ARGS_JSON="${args_json:-{}}" node - <<'NODE'
+  params=$(NAME="$name" node - <<'NODE'
+const fs=require('fs');
 const name = process.env.NAME;
-let aj = process.env.ARGS_JSON || '{}';
-let args; try { args = JSON.parse(aj); } catch { args = {}; }
-process.stdout.write(JSON.stringify({ name, arguments: args }));
+let data='';
+process.stdin.on('data', d => data += d).on('end', () => {
+  let args; try { args = JSON.parse(data && data.trim() ? data : '{}'); } catch { args = {}; }
+  process.stdout.write(JSON.stringify({ name, arguments: args }));
+});
 NODE
-)
+  <<< "${args_json:-{}}")
   # Log request envelope for debugging
   printf '%s' "$params" > "$ROOT_DIR/out-req-${name}.json"
   # inspector semantics: tools/call returns {result:{content:[], structuredContent:...}}
