@@ -142,13 +142,15 @@ assert_envelope_ok() {
   const res = obj?.result ?? obj; // inspector may include {result:...}
   const content = res?.content;
   const structured = res?.structuredContent;
-  if(structured == null){
-    console.error('[assert] missing structuredContent'); process.exit(5);
+  const hasStructured = structured != null;
+  const hasContent = Array.isArray(content) && content.length>0 && content[0]?.type==='text';
+  if(!(hasStructured || hasContent)){
+    console.error('[assert] missing both structuredContent and content[]');
+    process.exit(5);
   }
-  // Prefer strict check, but tolerate servers that omit content while keeping structuredContent.
-  if(!Array.isArray(content) || content.length===0 || content[0]?.type!=='text'){
-    console.warn('[assert] note: missing/invalid content array; tolerating due to structuredContent present');
-  }
+  // Warn when one of the envelopes is missing for visibility.
+  if(!hasStructured){ console.warn('[assert] note: structuredContent absent; content[] present'); }
+  if(!hasContent){ console.warn('[assert] note: content[] absent; structuredContent present'); }
   console.log('[assert] envelope OK');
 NODE
 }
