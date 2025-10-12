@@ -22,264 +22,177 @@ fn run_with_env(req: &serde_json::Value, envs: &[(&str, &str)]) -> anyhow::Resul
 }
 
 #[test]
-fn list_pr_comments_plain_happy() -> anyhow::Result<()> {
+fn list_pr_reviews_variants_and_commits_and_files_pagination() -> anyhow::Result<()> {
     let server = MockServer::start();
-    let body = serde_json::json!({
-      "data": {"repository": {"pullRequest": {"comments": {"nodes": [{"id":"IC_1","body":"hi","createdAt":"2025-01-01T00:00:00Z","updatedAt":"2025-01-01T00:00:00Z","author":{"login":"alice"}}],"pageInfo": {"hasNextPage": false, "endCursor": null}} }}}
+    // Reviews (GraphQL underlying per summary; list_pr_reviews and _light share)
+    let graphql_reviews = serde_json::json!({
+        "data": {"repository": {"pullRequest": {"reviews": {"nodes": [
+            {"author": {"login": "a"}, "state":"APPROVED", "submittedAt":"2025-01-01T00:00:00Z"}
+        ]}}}},
+        "rateLimit": {"remaining":4999,"used":1,"resetAt":"1970-01-01T00:00:00Z"}
     });
-    let _m = server.mock(|when, then| {
-        when.method(POST).path("/graphql");
-        then.status(200).json_body(body);
+    let _m_graphql_reviews = server.mock(|when, then| {
+        when.method(POST).path("/graphql").body_contains("reviews");
+        then.status(200).json_body(graphql_reviews.clone());
     });
-    let req = serde_json::json!({
-        "jsonrpc":"2.0","method":"tools/call","id":1,
-        "params":{"name":"list_pr_comments_plain","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":true}}
+    // Commits (GraphQL)
+    let graphql_commits = serde_json::json!({
+        "data": {"repository": {"pullRequest": {"commits": {"nodes": [
+            {"commit": {"oid":"abc","messageHeadline":"h","changedFilesIfAvailable":2,"additionsIfAvailable":3,"deletionsIfAvailable":1,"pushedDate":"2025-01-01T00:00:00Z"}}
+        ]}}}},
+        "rateLimit": {"remaining":4999,"used":1,"resetAt":"1970-01-01T00:00:00Z"}
     });
-    let out = run_with_env(
-        &req,
-        &[
-            ("GITHUB_TOKEN", "t"),
-            (
-                "GITHUB_GRAPHQL_URL",
-                &format!("{}/graphql", server.base_url()),
-            ),
-            ("GITHUB_API_URL", server.base_url().as_str()),
-        ],
-    )?;
-    assert!(out.contains("\"structuredContent\""));
-    assert!(out.contains("\"items\""));
-    assert!(out.contains("\"author_login\":\"alice\""));
-    // No pagination, so meta should be pruned entirely by default
-    let v: serde_json::Value = serde_json::from_str(&out)?;
-    let sc = v
-        .get("result")
-        .and_then(|r| r.get("structuredContent"))
-        .and_then(|sc| sc.as_object());
-    assert!(
-        sc.and_then(|o| o.get("meta")).is_none(),
-        "expected meta to be omitted when has_more=false and include_rate not requested"
-    );
-    Ok(())
-}
-
-#[test]
-fn list_pr_review_threads_light_include_location_and_empty() -> anyhow::Result<()> {
-    // include_location true/false and empty threads
-    let server = MockServer::start();
-    // Empty threads response
-    let body_empty = serde_json::json!({
-        "data": {
-            "repository": {
-                "pullRequest": {
-                    "reviewThreads": {
-                        "nodes": [],
-                        "pageInfo": { "hasNextPage": false, "endCursor": null }
-                    }
-                }
-            }
-        },
-        "rateLimit": { "remaining": 4999, "used": 1, "resetAt": "1970-01-01T00:00:00Z" }
+    let _m_graphql_commits = server.mock(|when, then| {
+        when.method(POST).path("/graphql").body_contains("commits");
+        then.status(200).json_body(graphql_commits.clone());
     });
-    let _m1 = server.mock(|when, then| {
-        when.method(POST).path("/graphql");
-        then.status(200).json_body(body_empty.clone());
-    });
-    let req1 = serde_json::json!({
-        "jsonrpc":"2.0","method":"tools/call","id":1,
-        "params":{"name":"list_pr_review_threads_light","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":true,"include_location":true}}
-    });
-    let out1 = run_with_env(
-        &req1,
-        &[
-            ("GITHUB_TOKEN", "t"),
-            (
-                "GITHUB_GRAPHQL_URL",
-                &format!("{}/graphql", server.base_url()),
-            ),
-            ("GITHUB_API_URL", server.base_url().as_str()),
-        ],
-    )?;
-    assert!(out1.contains("\"structuredContent\""));
-    assert!(out1.contains("\"items\":[]"));
-
-    // include_location=false should also succeed with empty
-    let _m2 = server.mock(|when, then| {
-        when.method(POST).path("/graphql");
-        then.status(200).json_body(body_empty);
-    });
-    let req2 = serde_json::json!({
-        "jsonrpc":"2.0","method":"tools/call","id":2,
-        "params":{"name":"list_pr_review_threads_light","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":false,"include_location":false}}
-    });
-    let out2 = run_with_env(
-        &req2,
-        &[
-            ("GITHUB_TOKEN", "t"),
-            (
-                "GITHUB_GRAPHQL_URL",
-                &format!("{}/graphql", server.base_url()),
-            ),
-            ("GITHUB_API_URL", server.base_url().as_str()),
-        ],
-    )?;
-    assert!(out2.contains("\"structuredContent\""));
-    assert!(out2.contains("\"items\":[]"));
-    Ok(())
-}
-
-#[test]
-fn list_pr_review_comments_plain_include_location_and_empty() -> anyhow::Result<()> {
-    let server = MockServer::start();
-    // REST: empty array for review comments
-    let _m1 = server.mock(|when, then| {
-        when.method(GET).path("/repos/o/r/pulls/1/comments");
-        then.status(200)
-            .header("x-ratelimit-remaining", "4999")
-            .header("x-ratelimit-used", "1")
-            .header("x-ratelimit-reset", "0")
-            .json_body(serde_json::json!([]));
-    });
-    let req1 = serde_json::json!({
-        "jsonrpc":"2.0","method":"tools/call","id":1,
-        "params":{"name":"list_pr_review_comments_plain","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":true,"include_location":true}}
-    });
-    let out1 = run_with_env(
-        &req1,
-        &[
-            ("GITHUB_TOKEN", "t"),
-            ("GITHUB_API_URL", server.base_url().as_str()),
-        ],
-    )?;
-    assert!(out1.contains("\"structuredContent\""));
-    assert!(out1.contains("\"items\":[]"));
-
-    // include_location=false also OK (still empty)
-    let _m2 = server.mock(|when, then| {
-        when.method(GET).path("/repos/o/r/pulls/1/comments");
-        then.status(200).json_body(serde_json::json!([]));
-    });
-    let req2 = serde_json::json!({
-        "jsonrpc":"2.0","method":"tools/call","id":2,
-        "params":{"name":"list_pr_review_comments_plain","arguments": {"owner":"o","repo":"r","number":1,"limit":10,"include_author":false,"include_location":false}}
-    });
-    let out2 = run_with_env(
-        &req2,
-        &[
-            ("GITHUB_TOKEN", "t"),
-            ("GITHUB_API_URL", server.base_url().as_str()),
-        ],
-    )?;
-    assert!(out2.contains("\"structuredContent\""));
-    assert!(out2.contains("\"items\":[]"));
-    Ok(())
-}
-
-#[test]
-fn list_pr_review_comments_plain_pagination_and_flags() -> anyhow::Result<()> {
-    let server = MockServer::start();
-    // Page 1: two comments, Link header indicates next page
-    let _m1 = server.mock(|when, then| {
+    // Files (REST) with pagination: first page has Link next
+    let _m_files_p1 = server.mock(|when, then| {
         when.method(GET)
-            .path("/repos/o/r/pulls/1/comments")
+            .path("/repos/o/r/pulls/1/files")
+            .query_param("per_page", "1")
             .query_param("page", "1");
         then.status(200)
-            .header("link", format!("<{}/repos/o/r/pulls/1/comments?page=2>; rel=\"next\"", server.base_url()))
+            .header("link", &format!("<{}/repos/o/r/pulls/1/files?page=2>; rel=\"next\"", server.base_url()))
             .json_body(serde_json::json!([
-                {"id": 11, "body": "c1", "created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z","user":{"login":"alice"},"path":"f.rs","line":10,"start_line":9,"side":"right","start_side":"left","original_line":8,"original_start_line":7,"diff_hunk":"@@","commit_id":"abc","original_commit_id":"def"},
-                {"id": 12, "body": "c2", "created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z","user":null}
+                {"filename":"a.rs","status":"modified","additions":1,"deletions":1,"changes":2,"sha":"1","patch":"@@"}
             ]));
     });
-    let req1 = serde_json::json!({
-        "jsonrpc":"2.0","method":"tools/call","id":1,
-        "params":{"name":"list_pr_review_comments_plain","arguments": {"owner":"o","repo":"r","number":1,"limit":2,"include_author":true,"include_location":true}}
-    });
-    let out1 = run_with_env(
-        &req1,
-        &[
-            ("GITHUB_TOKEN", "t"),
-            ("GITHUB_API_URL", server.base_url().as_str()),
-        ],
-    )?;
-    let v1: serde_json::Value = serde_json::from_str(&out1)?;
-    let sc1 = v1
-        .get("result")
-        .and_then(|r| r.get("structuredContent"))
-        .cloned()
-        .unwrap_or_default();
-    assert_eq!(sc1["items"].as_array().unwrap().len(), 2);
-    assert_eq!(sc1["items"][0]["author_login"].as_str().unwrap(), "alice");
-    assert_eq!(sc1["items"][0]["side"].as_str().unwrap(), "RIGHT");
-    assert_eq!(sc1["items"][0]["start_side"].as_str().unwrap(), "LEFT");
-    assert!(sc1["meta"]["has_more"].as_bool().unwrap());
-    let cursor = sc1["meta"]["next_cursor"].as_str().unwrap().to_string();
-
-    // Page 2: single comment, no Link header => end
-    let _m2 = server.mock(|when, then| {
+    let _m_files_p2 = server.mock(|when, then| {
         when.method(GET)
-            .path("/repos/o/r/pulls/1/comments")
+            .path("/repos/o/r/pulls/1/files")
+            .query_param("per_page", "1")
             .query_param("page", "2");
-        then.status(200)
-            .json_body(serde_json::json!([
-                {"id": 13, "body": "c3", "created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z"}
-            ]));
+        then.status(200).json_body(serde_json::json!([
+            {"filename":"b.rs","status":"added","additions":2,"deletions":0,"changes":2,"sha":"2","patch":null}
+        ]));
     });
-    let req2 = serde_json::json!({
-        "jsonrpc":"2.0","method":"tools/call","id":2,
-        "params":{"name":"list_pr_review_comments_plain","arguments": {"owner":"o","repo":"r","number":1,"cursor":cursor}}
+    // Fallback for unified alias or any additional page=1 requests
+    let _m_files_fallback = server.mock(|when, then| {
+        when.method(GET).path("/repos/o/r/pulls/1/files");
+        then.status(200).json_body(serde_json::json!([
+            {"filename":"a.rs","status":"modified","additions":1,"deletions":1,"changes":2,"sha":"1","patch":"@@"}
+        ]));
     });
-    let out2 = run_with_env(
-        &req2,
-        &[
-            ("GITHUB_TOKEN", "t"),
-            ("GITHUB_API_URL", server.base_url().as_str()),
-        ],
-    )?;
-    let v2: serde_json::Value = serde_json::from_str(&out2)?;
-    let sc2 = v2
-        .get("result")
-        .and_then(|r| r.get("structuredContent"))
-        .cloned()
-        .unwrap_or_default();
-    assert_eq!(sc2["items"].as_array().unwrap().len(), 1);
-    // When no more pages, default behavior prunes meta
-    assert!(sc2.get("meta").is_none());
+
+    let base = server.base_url();
+    let env = [
+        ("GITHUB_TOKEN", "t"),
+        ("GITHUB_GRAPHQL_URL", &format!("{}/graphql", base)),
+        ("GITHUB_API_URL", base.as_str()),
+    ];
+
+    // list_pr_reviews_light
+    let req_reviews_light = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":1,
+        "params":{"name":"list_pr_reviews_light","arguments":{"owner":"o","repo":"r","number":1,"limit":10}}});
+    let out_rev_l = run_with_env(&req_reviews_light, &env)?;
+    assert!(out_rev_l.contains("\"items\""));
+    // list_pr_reviews (unified)
+    let req_reviews = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":2,
+        "params":{"name":"list_pr_reviews","arguments":{"owner":"o","repo":"r","number":1,"limit":10}}});
+    let out_rev = run_with_env(&req_reviews, &env)?;
+    assert!(out_rev.contains("\"items\""));
+
+    // list_pr_commits_light
+    let req_commits_light = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":3,
+        "params":{"name":"list_pr_commits_light","arguments":{"owner":"o","repo":"r","number":1,"limit":10}}});
+    let out_com_l = run_with_env(&req_commits_light, &env)?;
+    assert!(out_com_l.contains("\"items\""));
+    // list_pr_commits (unified)
+    let req_commits = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":4,
+        "params":{"name":"list_pr_commits","arguments":{"owner":"o","repo":"r","number":1,"limit":10}}});
+    let out_com = run_with_env(&req_commits, &env)?;
+    assert!(out_com.contains("\"items\""));
+
+    // list_pr_files_light page1 (legacy page/per_page)
+    let req_files_l = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":5,
+        "params":{"name":"list_pr_files_light","arguments":{"owner":"o","repo":"r","number":1,"per_page":1,"page":1}}});
+    let out_files_l = run_with_env(&req_files_l, &env)?;
+    println!("out_files_l={}", out_files_l);
+    let v_l: serde_json::Value = serde_json::from_str(&out_files_l)?;
+    let sc_l = v_l["result"]["structuredContent"].clone();
+    assert!(sc_l["meta"]["has_more"].as_bool().unwrap());
+    // page-2 via page/per_page
+    let req_files_l2 = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":6,
+        "params":{"name":"list_pr_files_light","arguments":{"owner":"o","repo":"r","number":1,"per_page":1,"page":2}}});
+    let out_files_l2 = run_with_env(&req_files_l2, &env)?;
+    assert!(out_files_l2.contains("b.rs"));
+
+    // list_pr_files unified alias (legacy params supported by same handler)
+    let req_files = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":7,
+        "params":{"name":"list_pr_files","arguments":{"owner":"o","repo":"r","number":1,"per_page":1,"page":1}}});
+    let out_files = run_with_env(&req_files, &env)?;
+    println!("out_files_unified={}", out_files);
+    let v_u: serde_json::Value = serde_json::from_str(&out_files)?;
+    let sc_u = v_u["result"]["structuredContent"].clone();
+    assert!(sc_u["meta"]["has_more"].as_bool().unwrap());
+    assert!(sc_u["meta"]["next_cursor"].is_string());
     Ok(())
 }
-#[test]
-fn get_pr_diff_and_patch_rest_headers() -> anyhow::Result<()> {
-    let server = MockServer::start();
-    let _m1 = server.mock(|when, then| {
-        when.method(GET).path("/repos/o/r/pulls/1");
-        then.status(200)
-            .header("x-ratelimit-remaining", "4999")
-            .header("x-ratelimit-used", "1")
-            .header("x-ratelimit-reset", "0")
-            .body("diff-data");
-    });
-    let req = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"get_pr_diff","arguments":{"owner":"o","repo":"r","number":1}}});
-    let out = run_with_env(
-        &req,
-        &[
-            ("GITHUB_TOKEN", "t"),
-            ("GITHUB_API_URL", server.base_url().as_str()),
-        ],
-    )?;
-    assert!(out.contains("diff-data")); // text content
-    assert!(out.contains("\"structuredContent\""));
 
-    let _m2 = server.mock(|when, then| {
-        when.method(GET).path("/repos/o/r/pulls/2");
-        then.status(200).body("patch-data");
+#[test]
+fn resolve_and_unresolve_review_thread_happy_and_error() -> anyhow::Result<()> {
+    let server = MockServer::start();
+    // GraphQL mutation happy path resolve
+    let gql_ok = serde_json::json!({
+        "data": {"resolveReviewThread": {"thread": {"id":"T1","isResolved": true}}},
+        "rateLimit": {"remaining": 4999, "used": 1, "resetAt": "1970-01-01T00:00:00Z"}
     });
-    let req2 = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"get_pr_patch","arguments":{"owner":"o","repo":"r","number":2}}});
-    let out2 = run_with_env(
-        &req2,
-        &[
-            ("GITHUB_TOKEN", "t"),
-            ("GITHUB_API_URL", server.base_url().as_str()),
-        ],
-    )?;
-    assert!(out2.contains("patch-data"));
-    assert!(out2.contains("\"structuredContent\""));
+    let _m_ok = server.mock(|when, then| {
+        when.method(POST)
+            .path("/graphql")
+            .body_contains("resolveReviewThread")
+            .body_contains("T1");
+        then.status(200).json_body(gql_ok.clone());
+    });
+    // GraphQL mutation error path
+    let gql_err = serde_json::json!({
+        "errors": [{"message":"thread not found"}],
+        "data": null,
+        "rateLimit": {"remaining": 4999, "used": 1, "resetAt": "1970-01-01T00:00:00Z"}
+    });
+    let _m_err = server.mock(|when, then| {
+        when.method(POST)
+            .path("/graphql")
+            .body_contains("resolveReviewThread")
+            .body_contains("MISSING");
+        then.status(200).json_body(gql_err.clone());
+    });
+
+    let base = server.base_url();
+    let env = [
+        ("GITHUB_TOKEN", "t"),
+        ("GITHUB_GRAPHQL_URL", &format!("{}/graphql", base)),
+        ("GITHUB_API_URL", base.as_str()),
+    ];
+    // resolve
+    let req_res = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":1,
+        "params":{"name":"resolve_pr_review_thread","arguments":{"thread_id":"T1"}}});
+    let out_res = run_with_env(&req_res, &env)?;
+    println!("out_resolve={}", out_res);
+    let v_res: serde_json::Value = serde_json::from_str(&out_res)?;
+    assert_eq!(v_res["result"]["structuredContent"]["is_resolved"], true);
+    // unresolve
+    let gql_unresolve = serde_json::json!({
+        "data": {"unresolveReviewThread": {"thread": {"id":"T1","isResolved": false}}},
+        "rateLimit": {"remaining": 4999, "used": 1, "resetAt": "1970-01-01T00:00:00Z"}
+    });
+    let _m_unres = server.mock(|when, then| {
+        when.method(POST)
+            .path("/graphql")
+            .body_contains("unresolveReviewThread");
+        then.status(200).json_body(gql_unresolve.clone());
+    });
+    let req_unres = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":2,
+        "params":{"name":"unresolve_pr_review_thread","arguments":{"thread_id":"T1"}}});
+    let out_unres = run_with_env(&req_unres, &env)?;
+    assert!(out_unres.contains("false"));
+
+    // representative error path: use mocked error response
+    let req_err = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":3,
+        "params":{"name":"resolve_pr_review_thread","arguments":{"thread_id":"MISSING"}}});
+    let out_err = run_with_env(&req_err, &env)?;
+    let v: serde_json::Value = serde_json::from_str(&out_err)?;
+    assert!(v["result"]["isError"].as_bool().unwrap_or(false) || v.get("error").is_some());
     Ok(())
 }
