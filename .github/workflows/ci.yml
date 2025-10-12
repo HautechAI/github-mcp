@@ -81,6 +81,16 @@ jobs:
           }
           console.log('tools/list OK with', tools.length, 'tools');
           NODE
+      - name: Inspector tools/call get_issue (guarded)
+        if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.fork == false) }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "${GITHUB_TOKEN}" ]; then
+            echo "GITHUB_TOKEN missing; skipping get_issue smoke"; exit 0; fi
+          export MCP_DIAG_LOG="$GITHUB_WORKSPACE/mcp-diag.log"
+          npx @modelcontextprotocol/inspector-cli --cli ./target/release/github-mcp --method tools/call --params '{"name":"get_issue","arguments":{"owner":"HautechAI","repo":"github-mcp-test-repo","number":10}}' --timeout-ms 30000 > out-get-issue.json || npx @modelcontextprotocol/inspector-cli --cli ./target/release/github-mcp --method tools/call --params '{"name":"get_issue","arguments":{"owner":"HautechAI","repo":"github-mcp-test-repo","number":10}}' > out-get-issue.json
+          if [ -f out-get-issue.json ]; then cat out-get-issue.json; else echo "out-get-issue.json missing"; fi
       - name: Smoke stdio LF-only
         run: |
           node ./scripts/smoke_stdio_lf.js ./target/release/github-mcp
@@ -93,5 +103,6 @@ jobs:
             mcp-diag.log
             diag-smoke.log
             out-tools.json
+            out-get-issue.json
 
   # live E2E jobs removed per Issue #109; replaced by minimal Inspector smoke above.
