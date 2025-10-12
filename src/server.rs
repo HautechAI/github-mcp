@@ -4658,103 +4658,400 @@ fn handle_request_reviewers(id: Option<Id>, params: Value) -> Response {
         Ok(v) => v,
         Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
     };
-    let cfg = match Config::from_env() { Ok(c)=>c, Err(e)=> return rpc_error(id, -32603, &e, None)};
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (item, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { return (None, Meta{next_cursor:None,has_more:false,rate:None}, Some(ErrorShape{code:"server_error".into(), message:e.to_string(), retriable:false})) } };
-        #[derive(Serialize)] struct Body{ reviewers: Option<Vec<String>>, team_reviewers: Option<Vec<String>> }
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        #[derive(Serialize)]
+        struct Body {
+            reviewers: Option<Vec<String>>,
+            team_reviewers: Option<Vec<String>>,
+        }
         // No structured fields used from response; placeholder to satisfy type param
         #[allow(dead_code)]
-        #[derive(Deserialize)] struct Resp{}
-        let path = format!("/repos/{}/{}/pulls/{}/requested_reviewers", input.owner, input.repo, input.number);
-        let body = Body{ reviewers: input.reviewers, team_reviewers: input.team_reviewers };
-        let resp = http::rest_post_json::<Body, serde_json::Value>(&client, &cfg, &path, &body).await;
-        if let Some(err) = resp.error { return (None, Meta{next_cursor:None,has_more:false,rate: resp.meta.rate}, Some(ErrorShape{code: err.code, message: err.message, retriable: err.retriable})) }
-        (Some(RequestReviewersOutputItem{ requested: true }), Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, None)
+        #[derive(Deserialize)]
+        struct Resp {}
+        let path = format!(
+            "/repos/{}/{}/pulls/{}/requested_reviewers",
+            input.owner, input.repo, input.number
+        );
+        let body = Body {
+            reviewers: input.reviewers,
+            team_reviewers: input.team_reviewers,
+        };
+        let resp =
+            http::rest_post_json::<Body, serde_json::Value>(&client, &cfg, &path, &body).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        (
+            Some(RequestReviewersOutputItem { requested: true }),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
     });
-    let out = RequestReviewersOutput{ item, meta, error: err };
+    let out = RequestReviewersOutput {
+        item,
+        meta,
+        error: err,
+    };
     let structured = serde_json::to_value(&out).unwrap();
-    let text = structured.get("item").map(|_| "reviewers requested".to_string());
-    let is_error = structured.get("error").map(|e| !e.is_null()).unwrap_or(false);
+    let text = structured
+        .get("item")
+        .map(|_| "reviewers requested".to_string());
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
 
 fn handle_add_pr_comment(id: Option<Id>, params: Value) -> Response {
-    let input: AddPrCommentInput = match serde_json::from_value(params) { Ok(v)=>v, Err(e)=> return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env(){ Ok(c)=>c, Err(e)=> return rpc_error(id, -32603, &e, None)};
+    let input: AddPrCommentInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (item, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { return (None, Meta{next_cursor:None,has_more:false,rate:None}, Some(ErrorShape{code:"server_error".into(), message:e.to_string(), retriable:false})) } };
-        #[derive(Serialize)] struct Body{ body: String }
-        #[derive(Deserialize)] struct Resp{ id: i64, body: String, created_at: String }
-        let path = format!("/repos/{}/{}/issues/{}/comments", input.owner, input.repo, input.number);
-        let body = Body{ body: input.body };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        #[derive(Serialize)]
+        struct Body {
+            body: String,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            id: i64,
+            body: String,
+            created_at: String,
+        }
+        let path = format!(
+            "/repos/{}/{}/issues/{}/comments",
+            input.owner, input.repo, input.number
+        );
+        let body = Body { body: input.body };
         let resp = http::rest_post_json::<Body, Resp>(&client, &cfg, &path, &body).await;
-        if let Some(err) = resp.error { return (None, Meta{next_cursor:None,has_more:false,rate: resp.meta.rate}, Some(ErrorShape{code: err.code, message: err.message, retriable: err.retriable})) }
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
         let r = resp.value.unwrap();
-        (Some(AddPrCommentOutputItem{ id: r.id, body: r.body, created_at: r.created_at }), Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, None)
+        (
+            Some(AddPrCommentOutputItem {
+                id: r.id,
+                body: r.body,
+                created_at: r.created_at,
+            }),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
     });
-    let out = AddPrCommentOutput{ item, meta, error: err };
+    let out = AddPrCommentOutput {
+        item,
+        meta,
+        error: err,
+    };
     let structured = serde_json::to_value(&out).unwrap();
     let text = structured.get("item").map(|_| "comment added".to_string());
-    let is_error = structured.get("error").map(|e| !e.is_null()).unwrap_or(false);
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
 
 fn handle_add_pr_review_comment_inline(id: Option<Id>, params: Value) -> Response {
-    let input: AddPrReviewCommentInlineInput = match serde_json::from_value(params) { Ok(v)=>v, Err(e)=> return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env(){ Ok(c)=>c, Err(e)=> return rpc_error(id, -32603, &e, None)};
+    let input: AddPrReviewCommentInlineInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (item, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { return (None, Meta{next_cursor:None,has_more:false,rate:None}, Some(ErrorShape{code:"server_error".into(), message:e.to_string(), retriable:false})) } };
-        #[derive(Serialize)] struct Body { body: String, commit_id: String, path: String, side: String, line: i64, #[serde(skip_serializing_if="Option::is_none")] start_line: Option<i64>, #[serde(skip_serializing_if="Option::is_none")] start_side: Option<String> }
-        #[derive(Deserialize)] struct Resp { id: i64, body: String, path: String, line: i64 }
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        #[derive(Serialize)]
+        struct Body {
+            body: String,
+            commit_id: String,
+            path: String,
+            side: String,
+            line: i64,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            start_line: Option<i64>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            start_side: Option<String>,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            id: i64,
+            body: String,
+            path: String,
+            line: i64,
+        }
         // Normalize side/start_side to lowercase for REST
         let side = input.side.to_lowercase();
         let start_side = input.start_side.as_ref().map(|s| s.to_lowercase());
-        let path = format!("/repos/{}/{}/pulls/{}/comments", input.owner, input.repo, input.number);
-        let body = Body{ body: input.body, commit_id: input.commit_sha, path: input.path, side, line: input.line, start_line: input.start_line, start_side };
+        let path = format!(
+            "/repos/{}/{}/pulls/{}/comments",
+            input.owner, input.repo, input.number
+        );
+        let body = Body {
+            body: input.body,
+            commit_id: input.commit_sha,
+            path: input.path,
+            side,
+            line: input.line,
+            start_line: input.start_line,
+            start_side,
+        };
         let resp = http::rest_post_json::<Body, Resp>(&client, &cfg, &path, &body).await;
-        if let Some(err) = resp.error { return (None, Meta{next_cursor:None,has_more:false,rate: resp.meta.rate}, Some(ErrorShape{code: err.code, message: err.message, retriable: err.retriable})) }
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
         let r = resp.value.unwrap();
-        (Some(AddPrReviewCommentInlineOutputItem{ id: r.id, body: r.body, path: r.path, line: r.line }), Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, None)
+        (
+            Some(AddPrReviewCommentInlineOutputItem {
+                id: r.id,
+                body: r.body,
+                path: r.path,
+                line: r.line,
+            }),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
     });
-    let out = AddPrReviewCommentInlineOutput{ item, meta, error: err };
+    let out = AddPrReviewCommentInlineOutput {
+        item,
+        meta,
+        error: err,
+    };
     let structured = serde_json::to_value(&out).unwrap();
-    let text = structured.get("item").map(|_| "review comment added".to_string());
-    let is_error = structured.get("error").map(|e| !e.is_null()).unwrap_or(false);
+    let text = structured
+        .get("item")
+        .map(|_| "review comment added".to_string());
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
 
 fn handle_submit_pr_review(id: Option<Id>, params: Value) -> Response {
-    let input: SubmitPrReviewInput = match serde_json::from_value(params) { Ok(v)=>v, Err(e)=> return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env(){ Ok(c)=>c, Err(e)=> return rpc_error(id, -32603, &e, None)};
+    let input: SubmitPrReviewInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (item, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { return (None, Meta{next_cursor:None,has_more:false,rate:None}, Some(ErrorShape{code:"server_error".into(), message:e.to_string(), retriable:false})) } };
-        #[derive(Serialize)] struct Body { event: String, #[serde(skip_serializing_if="Option::is_none")] body: Option<String> }
-        #[derive(Deserialize)] struct Resp { id: i64, state: String, submitted_at: Option<String> }
-        let path = format!("/repos/{}/{}/pulls/{}/reviews", input.owner, input.repo, input.number);
-        let body = Body{ event: input.event, body: input.body };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        #[derive(Serialize)]
+        struct Body {
+            event: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            body: Option<String>,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            id: i64,
+            state: String,
+            submitted_at: Option<String>,
+        }
+        let path = format!(
+            "/repos/{}/{}/pulls/{}/reviews",
+            input.owner, input.repo, input.number
+        );
+        let body = Body {
+            event: input.event,
+            body: input.body,
+        };
         let resp = http::rest_post_json::<Body, Resp>(&client, &cfg, &path, &body).await;
-        if let Some(err) = resp.error { return (None, Meta{next_cursor:None,has_more:false,rate: resp.meta.rate}, Some(ErrorShape{code: err.code, message: err.message, retriable: err.retriable})) }
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
         let r = resp.value.unwrap();
-        (Some(SubmitPrReviewOutputItem{ id: r.id, state: r.state, submitted_at: r.submitted_at }), Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, None)
+        (
+            Some(SubmitPrReviewOutputItem {
+                id: r.id,
+                state: r.state,
+                submitted_at: r.submitted_at,
+            }),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
     });
-    let out = SubmitPrReviewOutput{ item, meta, error: err };
+    let out = SubmitPrReviewOutput {
+        item,
+        meta,
+        error: err,
+    };
     let structured = serde_json::to_value(&out).unwrap();
-    let text = structured.get("item").map(|_| "review submitted".to_string());
-    let is_error = structured.get("error").map(|e| !e.is_null()).unwrap_or(false);
+    let text = structured
+        .get("item")
+        .map(|_| "review submitted".to_string());
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
 
 fn handle_mark_pr_ready(id: Option<Id>, params: Value) -> Response {
-    let input: ToggleDraftInput = match serde_json::from_value(params) { Ok(v)=>v, Err(e)=> return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env(){ Ok(c)=>c, Err(e)=> return rpc_error(id, -32603, &e, None)};
+    let input: ToggleDraftInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (item, meta, err) = rt.block_on(async move {
         let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { return (None, Meta{next_cursor:None,has_more:false,rate:None}, Some(ErrorShape{code:"server_error".into(), message:e.to_string(), retriable:false})) } };
@@ -4781,17 +5078,30 @@ fn handle_mark_pr_ready(id: Option<Id>, params: Value) -> Response {
         let ok = d2.and_then(|x| x.markPullRequestReadyForReview).map(|y| !y.pullRequest.isDraft).unwrap_or(false);
         (Some(ToggleDraftOutputItem{ ok }), Meta{ next_cursor: None, has_more: false, rate: meta2.rate }, None)
     });
-    let out = ToggleDraftOutput{ item, meta, error: err };
+    let out = ToggleDraftOutput {
+        item,
+        meta,
+        error: err,
+    };
     let structured = serde_json::to_value(&out).unwrap();
     let text = structured.get("item").map(|_| "marked ready".to_string());
-    let is_error = structured.get("error").map(|e| !e.is_null()).unwrap_or(false);
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
 
 fn handle_convert_pr_to_draft(id: Option<Id>, params: Value) -> Response {
-    let input: ToggleDraftInput = match serde_json::from_value(params) { Ok(v)=>v, Err(e)=> return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env(){ Ok(c)=>c, Err(e)=> return rpc_error(id, -32603, &e, None)};
+    let input: ToggleDraftInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (item, meta, err) = rt.block_on(async move {
         let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { return (None, Meta{next_cursor:None,has_more:false,rate:None}, Some(ErrorShape{code:"server_error".into(), message:e.to_string(), retriable:false})) } };
@@ -4817,57 +5127,212 @@ fn handle_convert_pr_to_draft(id: Option<Id>, params: Value) -> Response {
         let ok = d2.and_then(|x| x.convertPullRequestToDraft).map(|y| y.pullRequest.isDraft).unwrap_or(false);
         (Some(ToggleDraftOutputItem{ ok }), Meta{ next_cursor: None, has_more: false, rate: meta2.rate }, None)
     });
-    let out = ToggleDraftOutput{ item, meta, error: err };
+    let out = ToggleDraftOutput {
+        item,
+        meta,
+        error: err,
+    };
     let structured = serde_json::to_value(&out).unwrap();
-    let text = structured.get("item").map(|_| "converted to draft".to_string());
-    let is_error = structured.get("error").map(|e| !e.is_null()).unwrap_or(false);
+    let text = structured
+        .get("item")
+        .map(|_| "converted to draft".to_string());
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
 
 fn handle_merge_pull_request(id: Option<Id>, params: Value) -> Response {
-    let input: MergePullRequestInput = match serde_json::from_value(params) { Ok(v)=>v, Err(e)=> return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env(){ Ok(c)=>c, Err(e)=> return rpc_error(id, -32603, &e, None)};
+    let input: MergePullRequestInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (item, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { return (None, Meta{next_cursor:None,has_more:false,rate:None}, Some(ErrorShape{code:"server_error".into(), message:e.to_string(), retriable:false})) } };
-        #[derive(Serialize)] struct Body { #[serde(skip_serializing_if="Option::is_none")] merge_method: Option<String>, #[serde(skip_serializing_if="Option::is_none")] commit_title: Option<String>, #[serde(skip_serializing_if="Option::is_none")] commit_message: Option<String>, #[serde(skip_serializing_if="Option::is_none")] sha: Option<String> }
-        #[derive(Deserialize)] struct Resp { merged: bool, sha: Option<String>, message: Option<String> }
-        let path = format!("/repos/{}/{}/pulls/{}/merge", input.owner, input.repo, input.number);
-        let body = Body{ merge_method: input.merge_method.or_else(|| Some("squash".into())), commit_title: input.commit_title, commit_message: input.commit_message, sha: input.expected_head_sha };
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        #[derive(Serialize)]
+        struct Body {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            merge_method: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            commit_title: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            commit_message: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            sha: Option<String>,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            merged: bool,
+            sha: Option<String>,
+            message: Option<String>,
+        }
+        let path = format!(
+            "/repos/{}/{}/pulls/{}/merge",
+            input.owner, input.repo, input.number
+        );
+        let body = Body {
+            merge_method: input.merge_method.or_else(|| Some("squash".into())),
+            commit_title: input.commit_title,
+            commit_message: input.commit_message,
+            sha: input.expected_head_sha,
+        };
         let resp = http::rest_put_json::<Body, Resp>(&client, &cfg, &path, &body).await;
-        if let Some(err) = resp.error { return (None, Meta{next_cursor:None,has_more:false,rate: resp.meta.rate}, Some(ErrorShape{code: err.code, message: err.message, retriable: err.retriable})) }
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
         let r = resp.value.unwrap();
-        (Some(MergePullRequestOutputItem{ merged: r.merged, sha: r.sha, message: r.message }), Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, None)
+        (
+            Some(MergePullRequestOutputItem {
+                merged: r.merged,
+                sha: r.sha,
+                message: r.message,
+            }),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
     });
-    let out = MergePullRequestOutput{ item, meta, error: err };
+    let out = MergePullRequestOutput {
+        item,
+        meta,
+        error: err,
+    };
     let structured = serde_json::to_value(&out).unwrap();
-    let text = structured.get("item").and_then(|v| v.get("message")).and_then(|v| v.as_str()).map(|s| s.to_string());
-    let is_error = structured.get("error").map(|e| !e.is_null()).unwrap_or(false);
+    let text = structured
+        .get("item")
+        .and_then(|v| v.get("message"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
 
 fn handle_update_pr_branch(id: Option<Id>, params: Value) -> Response {
-    let input: UpdatePrBranchInput = match serde_json::from_value(params) { Ok(v)=>v, Err(e)=> return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env(){ Ok(c)=>c, Err(e)=> return rpc_error(id, -32603, &e, None)};
+    let input: UpdatePrBranchInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (item, meta, err) = rt.block_on(async move {
-        let client = match http::build_client(&cfg) { Ok(c)=>c, Err(e)=> { return (None, Meta{next_cursor:None,has_more:false,rate:None}, Some(ErrorShape{code:"server_error".into(), message:e.to_string(), retriable:false})) } };
-        #[derive(Serialize)] struct Body { #[serde(skip_serializing_if="Option::is_none")] expected_head_sha: Option<String> }
+        let client = match http::build_client(&cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    None,
+                    Meta {
+                        next_cursor: None,
+                        has_more: false,
+                        rate: None,
+                    },
+                    Some(ErrorShape {
+                        code: "server_error".into(),
+                        message: e.to_string(),
+                        retriable: false,
+                    }),
+                )
+            }
+        };
+        #[derive(Serialize)]
+        struct Body {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            expected_head_sha: Option<String>,
+        }
         // No structured fields used from response; placeholder to satisfy type param
         #[allow(dead_code)]
-        #[derive(Deserialize)] struct Resp{}
-        let path = format!("/repos/{}/{}/pulls/{}/update-branch", input.owner, input.repo, input.number);
-        let body = Body{ expected_head_sha: input.expected_head_sha };
-        let resp = http::rest_put_json::<Body, serde_json::Value>(&client, &cfg, &path, &body).await;
-        if let Some(err) = resp.error { return (None, Meta{next_cursor:None,has_more:false,rate: resp.meta.rate}, Some(ErrorShape{code: err.code, message: err.message, retriable: err.retriable})) }
-        (Some(UpdatePrBranchOutputItem{ ok: true }), Meta{ next_cursor: None, has_more: false, rate: resp.meta.rate }, None)
+        #[derive(Deserialize)]
+        struct Resp {}
+        let path = format!(
+            "/repos/{}/{}/pulls/{}/update-branch",
+            input.owner, input.repo, input.number
+        );
+        let body = Body {
+            expected_head_sha: input.expected_head_sha,
+        };
+        let resp =
+            http::rest_put_json::<Body, serde_json::Value>(&client, &cfg, &path, &body).await;
+        if let Some(err) = resp.error {
+            return (
+                None,
+                Meta {
+                    next_cursor: None,
+                    has_more: false,
+                    rate: resp.meta.rate,
+                },
+                Some(ErrorShape {
+                    code: err.code,
+                    message: err.message,
+                    retriable: err.retriable,
+                }),
+            );
+        }
+        (
+            Some(UpdatePrBranchOutputItem { ok: true }),
+            Meta {
+                next_cursor: None,
+                has_more: false,
+                rate: resp.meta.rate,
+            },
+            None,
+        )
     });
-    let out = UpdatePrBranchOutput{ item, meta, error: err };
+    let out = UpdatePrBranchOutput {
+        item,
+        meta,
+        error: err,
+    };
     let structured = serde_json::to_value(&out).unwrap();
     let text = structured.get("item").map(|_| "branch updated".to_string());
-    let is_error = structured.get("error").map(|e| !e.is_null()).unwrap_or(false);
+    let is_error = structured
+        .get("error")
+        .map(|e| !e.is_null())
+        .unwrap_or(false);
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
