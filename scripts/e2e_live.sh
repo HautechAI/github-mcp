@@ -76,10 +76,18 @@ session_stop() {
 # Send one request over the persistent session and capture the single-line JSON response
 session_call() {
   local method="$1"; shift
-  local params_json="$1"; shift || true
+  local params_json="${1:-{}}"; shift || true
   local out_var="$1"; shift || true
   local req
-  req=$(node -e "process.stdout.write(JSON.stringify({method: '$method', params: $params_json || {}}))")
+  # Build a single-line JSON-RPC request safely using env vars; fall back to {} for params when invalid/empty.
+  req=$(METHOD="$method" PARAMS_JSON="$params_json" node - <<'NODE'
+const m = process.env.METHOD;
+let pj = process.env.PARAMS_JSON || '{}';
+let params;
+try { params = JSON.parse(pj); } catch { params = {}; }
+process.stdout.write(JSON.stringify({ method: m, params }));
+NODE
+)
   # Write request
   if ! printf '%s\n' "$req" >&${SESSION_IN_FD}; then
     echo "[e2e][fatal] failed to write to session (method=$method)" | tee -a "$LOG" >&2
@@ -214,12 +222,21 @@ fi
 # Helper to call a tool with arguments and assert envelope
 tool_call() {
   local name="$1"; shift
-  local args_json="$1"; shift
+  local args_json="$1"; shift || true
   local out="$ROOT_DIR/out-${name}.json"
   echo "[e2e] tools/call ${name} ${args_json}" | tee -a "$LOG" >&2
   local resp
+  # Build params for tools/call safely
+  local params
+  params=$(NAME="$name" ARGS_JSON="${args_json:-{}}" node - <<'NODE'
+const name = process.env.NAME;
+let aj = process.env.ARGS_JSON || '{}';
+let args; try { args = JSON.parse(aj); } catch { args = {}; }
+process.stdout.write(JSON.stringify({ name, arguments: args }));
+NODE
+)
   # inspector semantics: tools/call returns {result:{content:[], structuredContent:...}}
-  if ! session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name: '$name', arguments: $args_json}))")" resp; then
+  if ! session_call "tools/call" "$params" resp; then
     session_stop; exit 1; fi
   printf '%s' "$resp" | save_json "$out"
   assert_envelope_ok "$out"
