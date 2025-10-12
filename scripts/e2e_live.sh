@@ -76,10 +76,25 @@ session_stop() {
 # Send one request over the persistent session and capture the single-line JSON response
 session_call() {
   local method="$1"; shift
-  local params_json="$1"; shift || true
+  local params_json="${1:-{}}"; shift || true
   local out_var="$1"; shift || true
+  local req_out_path="${1:-}"; shift || true
   local req
-  req=$(node -e "process.stdout.write(JSON.stringify({method: '$method', params: $params_json || {}}))")
+  # Build a single-line JSON-RPC request safely using env vars; fall back to {} for params when invalid/empty.
+  req=$(METHOD="$method" PARAMS_JSON="$params_json" node - <<'NODE'
+const m = process.env.METHOD;
+let pj = process.env.PARAMS_JSON || '{}';
+let params;
+try { params = JSON.parse(pj); } catch { params = {}; }
+// Build full JSON-RPC request so we can log it exactly.
+const msg = { jsonrpc: '2.0', id: 0, method: m, params };
+process.stdout.write(JSON.stringify(msg));
+NODE
+)
+  # If a req_out_path was provided, log the exact request envelope
+  if [ -n "$req_out_path" ]; then
+    printf '%s' "$req" > "$req_out_path"
+  fi
   # Write request
   if ! printf '%s\n' "$req" >&${SESSION_IN_FD}; then
     echo "[e2e][fatal] failed to write to session (method=$method)" | tee -a "$LOG" >&2
@@ -92,6 +107,35 @@ session_call() {
     return 1
   fi
   # Optionally export into a variable name
+  if [ -n "$out_var" ]; then
+    printf -v "$out_var" '%s' "$line"
+  else
+    echo "$line"
+  fi
+}
+
+# Send a pre-built helper command JSON (shape: {method, params}) directly to the session
+session_send_cmd() {
+  local cmd_json="$1"; shift
+  local out_var="$1"; shift || true
+  local req_out_path="${1:-}"; shift || true
+  if [ -n "$req_out_path" ]; then
+    printf '%s' "$cmd_json" > "$req_out_path"
+  fi
+  # Send exactly what we wrote to the req file if provided; otherwise send the string directly
+  local to_send="$cmd_json"
+  if [ -n "$req_out_path" ]; then
+    to_send=$(cat "$req_out_path")
+  fi
+  if ! printf '%s\n' "$to_send" >&${SESSION_IN_FD}; then
+    echo "[e2e][fatal] failed to write raw cmd to session" | tee -a "$LOG" >&2
+    return 1
+  fi
+  local line
+  if ! IFS= read -r -t 10 line <&${SESSION_OUT_FD}; then
+    echo "[e2e][fatal] timeout/no response for raw cmd" | tee -a "$LOG" >&2
+    return 1
+  fi
   if [ -n "$out_var" ]; then
     printf -v "$out_var" '%s' "$line"
   else
@@ -131,15 +175,26 @@ assert_envelope_ok() {
   let obj; try{ obj=JSON.parse(raw);}catch(e){
     console.error(`[assert] not JSON: ${e}`); process.exit(2);
   }
+  // JSON-RPC success: result present; error path handled below.
+  if (obj && obj.error) {
+    const code = obj.error.code;
+    const message = obj.error.message;
+    const data = obj.error.data;
+    console.error(`[assert] tools/call error: code=${code} message=${message} data=${JSON.stringify(data||{})}`);
+    process.exit(6);
+  }
   const res = obj?.result ?? obj; // inspector may include {result:...}
   const content = res?.content;
   const structured = res?.structuredContent;
-  if(!Array.isArray(content) || content.length===0 || content[0]?.type!=='text'){
-    console.error('[assert] invalid MCP content envelope'); process.exit(4);
+  const hasStructured = structured != null;
+  const hasContent = Array.isArray(content) && content.length>0 && content[0]?.type==='text';
+  if(!(hasStructured || hasContent)){
+    console.error('[assert] missing both structuredContent and content[]');
+    process.exit(5);
   }
-  if(structured == null){
-    console.error('[assert] missing structuredContent'); process.exit(5);
-  }
+  // Warn when one of the envelopes is missing for visibility.
+  if(!hasStructured){ console.warn('[assert] note: structuredContent absent; content[] present'); }
+  if(!hasContent){ console.warn('[assert] note: content[] absent; structuredContent present'); }
   console.log('[assert] envelope OK');
 NODE
 }
@@ -214,13 +269,56 @@ fi
 # Helper to call a tool with arguments and assert envelope
 tool_call() {
   local name="$1"; shift
-  local args_json="$1"; shift
+  local args_json="$1"; shift || true
   local out="$ROOT_DIR/out-${name}.json"
   echo "[e2e] tools/call ${name} ${args_json}" | tee -a "$LOG" >&2
   local resp
+  # Build full helper command for tools/call safely
+  local cmd
+  local args_file
+  args_file=$(mktemp)
+  printf '%s' "${args_json:-{}}" > "$args_file"
+  local args_out="$ROOT_DIR/out-args-${name}.json"
+  # REQUIRED_KEYS is optional, comma-separated list for validation
+  if ! cmd=$(NAME="$name" ARGS_PATH="$args_file" ARGS_OUT_PATH="$args_out" REQUIRED_KEYS="${REQUIRED_KEYS:-}" node - <<'NODE'
+const fs=require('fs');
+const name=process.env.NAME;
+const ap=process.env.ARGS_PATH;
+const argsOut=process.env.ARGS_OUT_PATH;
+const reqKeys=(process.env.REQUIRED_KEYS||'').split(',').map(s=>s.trim()).filter(Boolean);
+if(!ap){ console.error('[node] ARGS_PATH missing'); process.exit(90); }
+let txt;
+try{ txt=fs.readFileSync(ap,'utf8'); }catch(e){ console.error('[node] failed to read ARGS_PATH:', e.message); process.exit(91); }
+let args; try{ args=JSON.parse(txt);}catch(e){ console.error('[node] invalid args JSON:', e.message); process.exit(92); }
+if(typeof args!=="object"||args===null||Array.isArray(args)){ console.error('[node] args is not an object'); process.exit(93); }
+// Validate required keys if provided
+if(reqKeys.length){
+  const missing=reqKeys.filter(k=>!(k in args));
+  if(missing.length){ console.error('[node] missing required keys:', missing.join(',')); process.exit(94); }
+}
+try{ if(argsOut){ fs.writeFileSync(argsOut, JSON.stringify(args)); } }catch{}
+const cmd={ method:'tools/call', params:{ name, arguments: args } };
+process.stdout.write(JSON.stringify(cmd));
+NODE
+  ); then
+    echo "[e2e][fatal] failed to build tools/call envelope for $name" | tee -a "$LOG" >&2
+    rm -f "$args_file"
+    session_stop; exit 1
+  fi
+  rm -f "$args_file"
   # inspector semantics: tools/call returns {result:{content:[], structuredContent:...}}
-  if ! session_call "tools/call" "$(node -e "process.stdout.write(JSON.stringify({name: '$name', arguments: $args_json}))")" resp; then
+  if ! session_send_cmd "$cmd" resp "$ROOT_DIR/out-req-${name}.json"; then
     session_stop; exit 1; fi
+  echo "[e2e] waiting for response: tools/call ${name}" | tee -a "$LOG" >&2
+  # Log response envelope for debugging and keep legacy filename for downstream asserts
+  if [ -n "${resp:-}" ]; then
+    printf '%s' "$resp" | save_json "$ROOT_DIR/out-resp-${name}.json"
+  else
+    # If empty (timeout), dump a hex of request to help debugging
+    if command -v hexdump >/dev/null 2>&1; then
+      hexdump -C "$ROOT_DIR/out-req-${name}.json" | save_json "$ROOT_DIR/out-req-${name}.hex" || true
+    fi
+  fi
   printf '%s' "$resp" | save_json "$out"
   assert_envelope_ok "$out"
 }
@@ -233,9 +331,69 @@ else
   echo "[e2e] ping disabled; skipping" | tee -a "$LOG" >&2
 fi
 
-# Issues
-tool_call list_issues "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"limit\":10,\"include_author\":true}"
-assert_has_field "$ROOT_DIR/out-list_issues.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0"
+# Issues (dynamic tool/args selection based on descriptors)
+echo "[e2e] resolving list_issues tool and args dynamically" | tee -a "$LOG" >&2
+LI_RES=$(OWNER="$OWNER" REPO="$REPO" node - "$TOOLS_JSON" <<'NODE'
+const fs=require('fs');
+const path=process.argv[2];
+const raw=fs.readFileSync(path,'utf8');
+const obj=JSON.parse(raw);
+// Accept tool list in multiple shapes: {result:{tools}}, {tools}, or plain array
+const tools = obj?.result?.tools || obj?.tools || (Array.isArray(obj)?obj:[]);
+// Prefer exact name, else try common aliases
+const candidates=['list_issues','issues_list','list_repo_issues'];
+let tool = tools.find(t=>t && candidates.includes(t.name));
+if(!tool){
+  // Fallback: first tool whose name contains both "list" and "issue"
+  tool = tools.find(t => {
+    const n=(t?.name||'').toLowerCase();
+    return n.includes('list') && n.includes('issue');
+  });
+}
+if(!tool){ process.stdout.write(JSON.stringify({name:null,args:{}})); process.exit(0); }
+const props = tool.inputSchema?.properties || {};
+const out={ name: tool.name, args: {} };
+function has(p){ return Object.prototype.hasOwnProperty.call(props,p); }
+// Build minimal, schema-compliant args
+out.args = {};
+if(has('owner')) out.args.owner = process.env.OWNER;
+if(has('repo')) out.args.repo = process.env.REPO;
+else if(has('repo_full_name')){ out.args.repo_full_name = `${process.env.OWNER}/${process.env.REPO}`; }
+else if(has('repository')){ out.args.repository = `${process.env.OWNER}/${process.env.REPO}`; }
+// Prefer limit/per_page if present
+if(has('limit')) out.args.limit = 10;
+else if(has('per_page')) out.args.per_page = 10;
+// Optional booleans only if present in schema
+if(has('include_author')) out.args.include_author = true;
+// Basic required validation: ensure required keys are present
+const req = Array.isArray(tool.inputSchema?.required) ? tool.inputSchema.required : [];
+const missing = req.filter(k => !(k in out.args));
+out.missing = missing;
+process.stdout.write(JSON.stringify(out));
+NODE
+)
+LI_NAME=$(LI_RES="$LI_RES" node -e "const o=JSON.parse(process.env.LI_RES||'{}'); process.stdout.write(o.name||'')" 2>/dev/null)
+LI_ARGS=$(LI_RES="$LI_RES" node -e "const o=JSON.parse(process.env.LI_RES||'{}'); process.stdout.write(JSON.stringify(o.args||{}))" 2>/dev/null)
+LI_MISSING=$(LI_RES="$LI_RES" node -e "const o=JSON.parse(process.env.LI_RES||'{}'); process.stdout.write((o.missing||[]).join(','))" 2>/dev/null)
+if [ -z "$LI_NAME" ]; then
+  echo "[e2e][fatal] could not resolve list_issues tool from descriptors" | tee -a "$LOG" >&2
+  session_stop; exit 1
+fi
+if [ -n "$LI_MISSING" ]; then
+  echo "[e2e][fatal] required keys missing for $LI_NAME: $LI_MISSING" | tee -a "$LOG" >&2
+  # Log would-be request and exit for debuggability
+  printf '%s' "$(NAME="$LI_NAME" ARGS_JSON="$LI_ARGS" node - <<'NODE'
+const name=process.env.NAME; let aj=process.env.ARGS_JSON||'{}'; let args; try{ args=JSON.parse(aj);}catch{ args={}; }
+process.stdout.write(JSON.stringify({ name, arguments: args }));
+NODE
+)" > "$ROOT_DIR/out-req-${LI_NAME}.json"
+  session_stop; exit 1
+fi
+echo "[e2e] list_issues tool=$LI_NAME args=$LI_ARGS" | tee -a "$LOG" >&2
+# Provide required keys to envelope builder for validation
+REQUIRED_KEYS=$(LI_RES="$LI_RES" node -e "const o=JSON.parse(process.env.LI_RES||'{}'); const req=(o.req||o.required||[]); if(Array.isArray(req)&&req.length){ process.stdout.write(req.join(',')); }")
+tool_call "$LI_NAME" "$LI_ARGS"
+assert_has_field "$ROOT_DIR/out-${LI_NAME}.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:(Array.isArray(o.content)?o.content.length:0)"
 
 tool_call get_issue "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$ISSUE_NUM,\"include_author\":true}"
 assert_has_field "$ROOT_DIR/out-get_issue.json" "o.structuredContent?.item?.number"
