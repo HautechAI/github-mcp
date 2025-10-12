@@ -122,7 +122,12 @@ session_send_cmd() {
   if [ -n "$req_out_path" ]; then
     printf '%s' "$cmd_json" > "$req_out_path"
   fi
-  if ! printf '%s\n' "$cmd_json" >&${SESSION_IN_FD}; then
+  # Send exactly what we wrote to the req file if provided; otherwise send the string directly
+  local to_send="$cmd_json"
+  if [ -n "$req_out_path" ]; then
+    to_send=$(cat "$req_out_path")
+  fi
+  if ! printf '%s\n' "$to_send" >&${SESSION_IN_FD}; then
     echo "[e2e][fatal] failed to write raw cmd to session" | tee -a "$LOG" >&2
     return 1
   fi
@@ -270,13 +275,20 @@ tool_call() {
   local resp
   # Build full helper command for tools/call safely
   local cmd
-  cmd=$(NAME="$name" ARGS_JSON="${args_json:-{}}" node -e '
+  local args_file
+  args_file=$(mktemp)
+  printf '%s' "${args_json:-{}}" > "$args_file"
+  cmd=$(NAME="$name" ARGS_PATH="$args_file" node -e '
+const fs=require("fs");
 const name=process.env.NAME;
-let aj=process.env.ARGS_JSON||"{}";
-let args; try{ args=JSON.parse(aj);}catch{ args={}; }
+let args={};
+try{ const p=process.env.ARGS_PATH; args=JSON.parse(fs.readFileSync(p,"utf8")); }catch{ args={}; }
+// Basic validation for debug: ensure args is an object
+if(typeof args!=="object"||args===null||Array.isArray(args)){ args={}; }
 const cmd={ method: "tools/call", params: { name, arguments: args } };
 process.stdout.write(JSON.stringify(cmd));
 ')
+  rm -f "$args_file"
   # inspector semantics: tools/call returns {result:{content:[], structuredContent:...}}
   if ! session_send_cmd "$cmd" resp "$ROOT_DIR/out-req-${name}.json"; then
     session_stop; exit 1; fi
