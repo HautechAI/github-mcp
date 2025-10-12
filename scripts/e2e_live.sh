@@ -132,7 +132,7 @@ session_send_cmd() {
     return 1
   fi
   local line
-  if ! IFS= read -r -t 8 line <&${SESSION_OUT_FD}; then
+  if ! IFS= read -r -t 10 line <&${SESSION_OUT_FD}; then
     echo "[e2e][fatal] timeout/no response for raw cmd" | tee -a "$LOG" >&2
     return 1
   fi
@@ -278,16 +278,33 @@ tool_call() {
   local args_file
   args_file=$(mktemp)
   printf '%s' "${args_json:-{}}" > "$args_file"
-  cmd=$(NAME="$name" ARGS_PATH="$args_file" node -e '
-const fs=require("fs");
+  local args_out="$ROOT_DIR/out-args-${name}.json"
+  # REQUIRED_KEYS is optional, comma-separated list for validation
+  if ! cmd=$(NAME="$name" ARGS_PATH="$args_file" ARGS_OUT_PATH="$args_out" REQUIRED_KEYS="${REQUIRED_KEYS:-}" node - <<'NODE'
+const fs=require('fs');
 const name=process.env.NAME;
-let args={};
-try{ const p=process.env.ARGS_PATH; args=JSON.parse(fs.readFileSync(p,"utf8")); }catch{ args={}; }
-// Basic validation for debug: ensure args is an object
-if(typeof args!=="object"||args===null||Array.isArray(args)){ args={}; }
-const cmd={ method: "tools/call", params: { name, arguments: args } };
+const ap=process.env.ARGS_PATH;
+const argsOut=process.env.ARGS_OUT_PATH;
+const reqKeys=(process.env.REQUIRED_KEYS||'').split(',').map(s=>s.trim()).filter(Boolean);
+if(!ap){ console.error('[node] ARGS_PATH missing'); process.exit(90); }
+let txt;
+try{ txt=fs.readFileSync(ap,'utf8'); }catch(e){ console.error('[node] failed to read ARGS_PATH:', e.message); process.exit(91); }
+let args; try{ args=JSON.parse(txt);}catch(e){ console.error('[node] invalid args JSON:', e.message); process.exit(92); }
+if(typeof args!=="object"||args===null||Array.isArray(args)){ console.error('[node] args is not an object'); process.exit(93); }
+// Validate required keys if provided
+if(reqKeys.length){
+  const missing=reqKeys.filter(k=>!(k in args));
+  if(missing.length){ console.error('[node] missing required keys:', missing.join(',')); process.exit(94); }
+}
+try{ if(argsOut){ fs.writeFileSync(argsOut, JSON.stringify(args)); } }catch{}
+const cmd={ method:'tools/call', params:{ name, arguments: args } };
 process.stdout.write(JSON.stringify(cmd));
-')
+NODE
+  ); then
+    echo "[e2e][fatal] failed to build tools/call envelope for $name" | tee -a "$LOG" >&2
+    rm -f "$args_file"
+    session_stop; exit 1
+  fi
   rm -f "$args_file"
   # inspector semantics: tools/call returns {result:{content:[], structuredContent:...}}
   if ! session_send_cmd "$cmd" resp "$ROOT_DIR/out-req-${name}.json"; then
@@ -373,6 +390,8 @@ NODE
   session_stop; exit 1
 fi
 echo "[e2e] list_issues tool=$LI_NAME args=$LI_ARGS" | tee -a "$LOG" >&2
+# Provide required keys to envelope builder for validation
+REQUIRED_KEYS=$(LI_RES="$LI_RES" node -e "const o=JSON.parse(process.env.LI_RES||'{}'); const req=(o.req||o.required||[]); if(Array.isArray(req)&&req.length){ process.stdout.write(req.join(',')); }")
 tool_call "$LI_NAME" "$LI_ARGS"
 assert_has_field "$ROOT_DIR/out-${LI_NAME}.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:(Array.isArray(o.content)?o.content.length:0)"
 
