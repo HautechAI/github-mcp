@@ -5226,8 +5226,6 @@ fn handle_get_pr_overview(id: Option<Id>, params: Value) -> Response {
               repository(owner: $owner, name: $repo) { pullRequest(number: $number) { commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: $limit_contexts) { nodes { __typename ... on CheckRun { name conclusion } ... on StatusContext { context state } } } } } } } } }
             }
             "#;
-            #[derive(Deserialize)] struct CR { name: String, conclusion: Option<String> }
-            #[derive(Deserialize)] struct SC { context: String, state: Option<String> }
             #[derive(Deserialize)] struct CN { __typename: String, #[serde(default)] name: Option<String>, #[serde(default)] conclusion: Option<String>, #[serde(default)] context: Option<String>, #[serde(default)] state: Option<String> }
             #[derive(Deserialize)] struct Ctx { nodes: Vec<CN> }
             #[derive(Deserialize)] struct Roll { contexts: Option<Ctx> }
