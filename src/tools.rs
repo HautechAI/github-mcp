@@ -58,7 +58,8 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
                 "owner": {"type": "string"},
                 "repo": {"type": "string"},
                 "number": {"type": "integer"},
-                "include_author": {"type": "boolean"}
+                "include_author": {"type": "boolean"},
+                "include": {"type": "array", "items": {"type": "string", "enum": ["body"]}}
             },
             "required": ["owner", "repo", "number"]
         }),
@@ -112,7 +113,8 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
                 "owner": {"type": "string"},
                 "repo": {"type": "string"},
                 "number": {"type": "integer"},
-                "include_author": {"type": "boolean"}
+                "include_author": {"type": "boolean"},
+                "include": {"type": "array", "items": {"type": "string", "enum": ["body"]}}
             },
             "required": ["owner", "repo", "number"]
         }),
@@ -240,6 +242,48 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
         name: "get_pr_patch".into(),
         description: "Get PR patch (REST)".into(),
         input_schema: serde_json::json!({"type":"object","additionalProperties":false,"properties":{"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"}},"required":["owner","repo","number"]}),
+    };
+
+    // Overview endpoints (Issue #107)
+    let get_issue_overview = ToolDescriptor {
+        name: "get_issue_overview".into(),
+        description: "Get issue overview with optional sections".into(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "owner": {"type": "string"},
+                "repo": {"type": "string"},
+                "number": {"type": "integer"},
+                "include": {"type": "array", "items": {"type": "string", "enum": ["basic","body","comments"]}},
+                "section_limits": {"type": "object"},
+                "section_cursors": {"type": "object"},
+                "include_author": {"type": "boolean"}
+            },
+            "required": ["owner", "repo", "number"]
+        }),
+    };
+    let get_pr_overview = ToolDescriptor {
+        name: "get_pull_request_overview".into(),
+        description: "Get PR overview with optional sections".into(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "owner": {"type": "string"},
+                "repo": {"type": "string"},
+                "number": {"type": "integer"},
+                "include": {"type": "array", "items": {"type": "string", "enum": ["basic","body","comments","review_comments","review_threads","reviews","commits","files","status_summary","counts"]}},
+                "section_limits": {"type": "object"},
+                "section_cursors": {"type": "object"},
+                "include_author": {"type": "boolean"},
+                "include_location": {"type": "boolean"},
+                "files_include_patch": {"type": "boolean"},
+                "status_limit_contexts": {"type": "integer"},
+                "include_check_contexts": {"type": "boolean"}
+            },
+            "required": ["owner", "repo", "number"]
+        }),
     };
 
     let pr_summary = ToolDescriptor {
@@ -502,6 +546,8 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
         list_pr_files_unified,
         get_pr_diff,
         get_pr_patch,
+        get_issue_overview,
+        get_pr_overview,
         pr_summary,
         list_repo_secrets_light,
         list_repo_variables_light,
@@ -597,6 +643,9 @@ pub struct GetIssueInput {
     pub repo: String,
     pub number: i64,
     pub include_author: Option<bool>,
+    // Optional sections to include; currently supports ["body"]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -688,6 +737,9 @@ pub struct GetPullRequestInput {
     pub repo: String,
     pub number: i64,
     pub include_author: Option<bool>,
+    // Optional sections to include; currently supports ["body"]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -712,6 +764,148 @@ pub struct GetPullRequestItem {
 pub struct GetPullRequestOutput {
     pub item: Option<GetPullRequestItem>,
     pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+
+// Overview inputs/outputs
+#[derive(Debug, Deserialize)]
+pub struct GetIssueOverviewInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include: Option<Vec<String>>, // ["basic","body","comments"]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section_limits: Option<std::collections::HashMap<String, u32>>, // per-section limits
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section_cursors: Option<std::collections::HashMap<String, String>>, // per-section cursors
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_author: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SectionMeta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Section<T> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub items: Option<Vec<T>>,
+    pub meta: SectionMeta,
+}
+
+#[derive(Debug, Serialize)]
+pub struct IssueBasicItem {
+    pub id: String,
+    pub number: i64,
+    pub title: String,
+    pub state: String,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_login: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GetIssueOverviewItem {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub basic: Option<IssueBasicItem>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comments: Option<Section<PlainComment>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GetIssueOverviewOutput {
+    pub item: Option<GetIssueOverviewItem>,
+    pub meta: Meta, // rate only
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GetPullRequestOverviewInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include: Option<Vec<String>>, // ["basic","body","comments","review_comments","review_threads","reviews","commits","files","status_summary","counts"]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section_limits: Option<std::collections::HashMap<String, u32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section_cursors: Option<std::collections::HashMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_author: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_location: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub files_include_patch: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status_limit_contexts: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_check_contexts: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PrBasicItem {
+    pub id: String,
+    pub number: i64,
+    pub title: String,
+    pub state: String,
+    pub is_draft: bool,
+    pub merged: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merged_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_login: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StatusCounts { pub success: i32, pub pending: i32, pub failure: i32 }
+
+#[derive(Debug, Serialize)]
+pub struct CheckContext { pub name: String, pub state: String }
+
+#[derive(Debug, Serialize)]
+pub struct StatusSummary {
+    pub counts: StatusCounts,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contexts: Option<Vec<CheckContext>>, // when include_check_contexts=true
+}
+
+#[derive(Debug, Serialize)]
+pub struct GetPullRequestOverviewItem {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub basic: Option<PrBasicItem>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comments: Option<Section<PlainComment>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub review_comments: Option<Section<ReviewCommentItem>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub review_threads: Option<Section<ReviewThreadItem>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reviews: Option<Section<PrReviewItem>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commits: Option<Section<PrCommitItem>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub files: Option<Section<PrFileItem>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status_summary: Option<StatusSummary>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GetPullRequestOverviewOutput {
+    pub item: Option<GetPullRequestOverviewItem>,
+    pub meta: Meta, // rate only
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<ErrorShape>,
 }
