@@ -127,7 +127,7 @@ session_send_cmd() {
     return 1
   fi
   local line
-  if ! IFS= read -r -t 30 line <&${SESSION_OUT_FD}; then
+  if ! IFS= read -r -t 8 line <&${SESSION_OUT_FD}; then
     echo "[e2e][fatal] timeout/no response for raw cmd" | tee -a "$LOG" >&2
     return 1
   fi
@@ -270,22 +270,26 @@ tool_call() {
   local resp
   # Build full helper command for tools/call safely
   local cmd
-  cmd=$(NAME="$name" node - <<'NODE'
-const fs=require('fs');
-const name = process.env.NAME;
-let data='';
-process.stdin.on('data', d => data += d).on('end', () => {
-  let args; try { args = JSON.parse(data && data.trim() ? data : '{}'); } catch { args = {}; }
-  const cmd = { method: 'tools/call', params: { name, arguments: args } };
-  process.stdout.write(JSON.stringify(cmd));
-});
-NODE
-  <<< "${args_json:-{}}")
+  cmd=$(NAME="$name" ARGS_JSON="${args_json:-{}}" node -e '
+const name=process.env.NAME;
+let aj=process.env.ARGS_JSON||"{}";
+let args; try{ args=JSON.parse(aj);}catch{ args={}; }
+const cmd={ method: "tools/call", params: { name, arguments: args } };
+process.stdout.write(JSON.stringify(cmd));
+')
   # inspector semantics: tools/call returns {result:{content:[], structuredContent:...}}
   if ! session_send_cmd "$cmd" resp "$ROOT_DIR/out-req-${name}.json"; then
     session_stop; exit 1; fi
+  echo "[e2e] waiting for response: tools/call ${name}" | tee -a "$LOG" >&2
   # Log response envelope for debugging and keep legacy filename for downstream asserts
-  printf '%s' "$resp" | save_json "$ROOT_DIR/out-resp-${name}.json"
+  if [ -n "${resp:-}" ]; then
+    printf '%s' "$resp" | save_json "$ROOT_DIR/out-resp-${name}.json"
+  else
+    # If empty (timeout), dump a hex of request to help debugging
+    if command -v hexdump >/dev/null 2>&1; then
+      hexdump -C "$ROOT_DIR/out-req-${name}.json" | save_json "$ROOT_DIR/out-req-${name}.hex" || true
+    fi
+  fi
   printf '%s' "$resp" | save_json "$out"
   assert_envelope_ok "$out"
 }
