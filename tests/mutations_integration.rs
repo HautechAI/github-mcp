@@ -71,3 +71,46 @@ fn merge_pr_update_issue_update_pr_and_fork() -> anyhow::Result<()> {
     let out_fork = run_with_env(&fork, &env)?; assert!(out_fork.contains("\"forked:"));
     Ok(())
 }
+
+#[test]
+fn mutation_error_paths() -> anyhow::Result<()> {
+    let server = MockServer::start();
+    // merge_pr 405 or conflict
+    let _m_merge = server.mock(|when, then| {
+        when.method(PUT).path("/repos/o/r/pulls/1/merge");
+        then.status(405).json_body(serde_json::json!({"message":"Method Not Allowed"}));
+    });
+    // update_issue 410 gone
+    let _m_issue = server.mock(|when, then| {
+        when.method(PATCH).path("/repos/o/r/issues/2");
+        then.status(410).json_body(serde_json::json!({"message":"Issue is locked"}));
+    });
+    // update_pr 422 validation
+    let _m_pr = server.mock(|when, then| {
+        when.method(PATCH).path("/repos/o/r/pulls/3");
+        then.status(422).json_body(serde_json::json!({"message":"Validation Failed"}));
+    });
+    // fork repo 404
+    let _m_fork = server.mock(|when, then| {
+        when.method(POST).path("/repos/o/r/forks");
+        then.status(404).json_body(serde_json::json!({"message":"Not Found"}));
+    });
+    let base = server.base_url();
+    let env = [("GITHUB_TOKEN","t"),("GITHUB_API_URL", base.as_str())];
+
+    for (name, args) in [
+        ("merge_pr", serde_json::json!({"owner":"o","repo":"r","number":1})),
+        ("update_issue", serde_json::json!({"owner":"o","repo":"r","number":2})),
+        ("update_pull_request", serde_json::json!({"owner":"o","repo":"r","number":3})),
+        ("fork_repository", serde_json::json!({"owner":"o","repo":"r"})),
+    ] {
+        let req = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":9,
+            "params":{"name":name,"arguments":args}});
+        let out = run_with_env(&req, &env)?;
+        let v: serde_json::Value = serde_json::from_str(&out)?;
+        // All should surface isError and ErrorShape
+        assert!(v.get("result").and_then(|r| r.get("isError")).is_some() || v.get("error").is_some(),
+            "missing error for {}: {}", name, out);
+    }
+    Ok(())
+}

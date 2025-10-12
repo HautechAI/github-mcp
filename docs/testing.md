@@ -22,4 +22,4 @@ Local development
 
 Notes
 - Write-path tools (e.g., merge_pr, update_issue, update_pull_request, fork_repository) are covered via mocked integration tests only.
-- Some tools are gated by feature flags or Accept headers; see tests for examples (e.g., ping via GITHUB_MCP_ENABLE_PING, stars Accept gating).
+- Some tools are gated by feature flags or Accept headers. Tests do not rely on env flags; gating behavior is validated via default (disabled) paths only. Stars Accept gating is asserted via mocked responses.
