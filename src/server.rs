@@ -3313,7 +3313,7 @@ fn handle_get_commit(id: Option<Id>, params: Value) -> Response {
         }
         let r = resp.value.unwrap();
         let include_stats = input.include_stats.unwrap_or(true);
-        let include_files = input.include_files.unwrap_or(false);
+        let include_files = input.include_files.unwrap_or(true);
         let item = GetCommitItem {
             sha: r.sha,
             message: r.commit.message,
