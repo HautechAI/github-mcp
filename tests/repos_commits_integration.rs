@@ -9,8 +9,13 @@ fn run_with_env(req: &serde_json::Value, envs: &[(&str, &str)]) -> anyhow::Resul
     }
     let input = serde_json::to_string(req)?;
     let assert = cmd
-        .arg("--log-level").arg("warn")
-        .write_stdin({ let mut b=Vec::new(); writeln!(b, "{}", input).unwrap(); b })
+        .arg("--log-level")
+        .arg("warn")
+        .write_stdin({
+            let mut b = Vec::new();
+            writeln!(b, "{}", input).unwrap();
+            b
+        })
         .assert();
     let output = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
     Ok(output)
@@ -35,10 +40,12 @@ fn list_commits_filters_and_pagination_and_get_commit_toggles() -> anyhow::Resul
             ]));
     });
     let base = server.base_url();
-    let env = [("GITHUB_TOKEN","t"),("GITHUB_API_URL", base.as_str())];
+    let env = [("GITHUB_TOKEN", "t"), ("GITHUB_API_URL", base.as_str())];
     let req1 = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":1,
         "params":{"name":"list_commits","arguments":{"owner":"o","repo":"r","limit":1,"author":"a","since":"2025-01-01T00:00:00Z","until":"2025-01-02T00:00:00Z","include_author":true}}});
-    let out1 = run_with_env(&req1, &env)?; let v1: serde_json::Value = serde_json::from_str(&out1)?; let sc1 = v1["result"]["structuredContent"].clone();
+    let out1 = run_with_env(&req1, &env)?;
+    let v1: serde_json::Value = serde_json::from_str(&out1)?;
+    let sc1 = v1["result"]["structuredContent"].clone();
     assert!(sc1["meta"]["has_more"].as_bool().unwrap());
     let next = sc1["meta"]["next_cursor"].as_str().unwrap().to_string();
 
@@ -54,7 +61,8 @@ fn list_commits_filters_and_pagination_and_get_commit_toggles() -> anyhow::Resul
     });
     let req2 = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":2,
         "params":{"name":"list_commits","arguments":{"owner":"o","repo":"r","cursor":next}}});
-    let out2 = run_with_env(&req2, &env)?; assert!(out2.contains("c2"));
+    let out2 = run_with_env(&req2, &env)?;
+    assert!(out2.contains("c2"));
 
     // get_commit without files/stats
     let _m_get1 = server.mock(|when, then| {
@@ -65,7 +73,11 @@ fn list_commits_filters_and_pagination_and_get_commit_toggles() -> anyhow::Resul
     });
     let req3 = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":3,
         "params":{"name":"get_commit","arguments":{"owner":"o","repo":"r","ref":"c1"}}});
-    let out3 = run_with_env(&req3, &env)?; let v3: serde_json::Value = serde_json::from_str(&out3)?; let sc3 = v3["result"]["structuredContent"].clone(); assert!(sc3["item"]["files"].is_null()); assert!(sc3["item"]["stats"].is_null());
+    let out3 = run_with_env(&req3, &env)?;
+    let v3: serde_json::Value = serde_json::from_str(&out3)?;
+    let sc3 = v3["result"]["structuredContent"].clone();
+    assert!(sc3["item"]["files"].is_null());
+    assert!(sc3["item"]["stats"].is_null());
 
     // get_commit include_files and stats
     let _m_get2 = server.mock(|when, then| {
@@ -78,6 +90,10 @@ fn list_commits_filters_and_pagination_and_get_commit_toggles() -> anyhow::Resul
     });
     let req4 = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":4,
         "params":{"name":"get_commit","arguments":{"owner":"o","repo":"r","ref":"c1","include_files":true,"include_stats":true}}});
-    let out4 = run_with_env(&req4, &env)?; let v4: serde_json::Value = serde_json::from_str(&out4)?; let sc4 = v4["result"]["structuredContent"]["item"].clone(); assert!(sc4.get("files").is_some()); assert!(sc4.get("stats").is_some());
+    let out4 = run_with_env(&req4, &env)?;
+    let v4: serde_json::Value = serde_json::from_str(&out4)?;
+    let sc4 = v4["result"]["structuredContent"]["item"].clone();
+    assert!(sc4.get("files").is_some());
+    assert!(sc4.get("stats").is_some());
     Ok(())
 }

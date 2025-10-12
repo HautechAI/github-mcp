@@ -66,11 +66,13 @@ fn pr_summary_happy_with_checks_reviews_files() -> anyhow::Result<()> {
     // 4) Status
     let _m_status = server.mock(|when, then| {
         when.method(GET).path("/repos/o/r/commits/abc123/status");
-        then.status(200).json_body(serde_json::json!({"state":"success"}));
+        then.status(200)
+            .json_body(serde_json::json!({"state":"success"}));
     });
     // 5) Check runs
     let _m_checks = server.mock(|when, then| {
-        when.method(GET).path("/repos/o/r/commits/abc123/check-runs");
+        when.method(GET)
+            .path("/repos/o/r/commits/abc123/check-runs");
         then.status(200).json_body(serde_json::json!({
             "total_count": 3,
             "check_runs": [
@@ -85,15 +87,30 @@ fn pr_summary_happy_with_checks_reviews_files() -> anyhow::Result<()> {
         "jsonrpc":"2.0","method":"tools/call","id":1,
         "params": {"name":"pr_summary","arguments": {"owner":"o","repo":"r","number":1}}
     });
-    let out = run_with_env(&req, &[("GITHUB_TOKEN","t"),("GITHUB_API_URL", server.base_url().as_str())])?;
+    let out = run_with_env(
+        &req,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
     let v: serde_json::Value = serde_json::from_str(&out)?;
-    let sc = v.get("result").and_then(|r| r.get("structuredContent")).cloned().unwrap();
+    let sc = v
+        .get("result")
+        .and_then(|r| r.get("structuredContent"))
+        .cloned()
+        .unwrap();
     assert_eq!(sc["item"]["number"].as_i64().unwrap(), 1);
     assert_eq!(sc["item"]["author_login"].as_str().unwrap(), "alice");
     assert_eq!(sc["item"]["base_ref"].as_str().unwrap(), "main");
     assert_eq!(sc["item"]["files"].as_array().unwrap().len(), 2);
     assert_eq!(sc["item"]["review_states"]["APPROVED"].as_i64().unwrap(), 1);
-    assert_eq!(sc["item"]["review_states"]["CHANGES_REQUESTED"].as_i64().unwrap(), 1);
+    assert_eq!(
+        sc["item"]["review_states"]["CHANGES_REQUESTED"]
+            .as_i64()
+            .unwrap(),
+        1
+    );
     assert_eq!(sc["item"]["checks_summary"]["success"].as_i64().unwrap(), 1);
     assert_eq!(sc["item"]["checks_summary"]["failure"].as_i64().unwrap(), 1);
     assert_eq!(sc["item"]["checks_summary"]["pending"].as_i64().unwrap(), 1);
@@ -126,9 +143,19 @@ fn pr_summary_flags_disable_sections() -> anyhow::Result<()> {
         "jsonrpc":"2.0","method":"tools/call","id":1,
         "params": {"name":"pr_summary","arguments": {"owner":"o","repo":"r","number":1,"include_checks":false,"include_reviews":false,"include_files":false}}
     });
-    let out = run_with_env(&req, &[("GITHUB_TOKEN","t"),("GITHUB_API_URL", server.base_url().as_str())])?;
+    let out = run_with_env(
+        &req,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
     let v: serde_json::Value = serde_json::from_str(&out)?;
-    let sc = v.get("result").and_then(|r| r.get("structuredContent")).cloned().unwrap();
+    let sc = v
+        .get("result")
+        .and_then(|r| r.get("structuredContent"))
+        .cloned()
+        .unwrap();
     assert!(sc["item"]["checks_summary"].is_null());
     assert!(sc["item"]["files"].is_null());
     assert!(sc["item"]["review_states"].as_object().unwrap().is_empty());

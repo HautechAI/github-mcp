@@ -9,8 +9,13 @@ fn run_with_env(req: &serde_json::Value, envs: &[(&str, &str)]) -> anyhow::Resul
     }
     let input = serde_json::to_string(req)?;
     let assert = cmd
-        .arg("--log-level").arg("warn")
-        .write_stdin({ let mut b=Vec::new(); writeln!(b, "{}", input).unwrap(); b })
+        .arg("--log-level")
+        .arg("warn")
+        .write_stdin({
+            let mut b = Vec::new();
+            writeln!(b, "{}", input).unwrap();
+            b
+        })
         .assert();
     let output = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
     Ok(output)
@@ -31,26 +36,44 @@ fn list_tags_and_get_tag_mixed_types() -> anyhow::Result<()> {
     });
     let req1 = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":1,
         "params":{"name":"list_tags","arguments":{"owner":"o","repo":"r","limit":10}}});
-    let out1 = run_with_env(&req1, &[("GITHUB_TOKEN","t"),("GITHUB_API_URL", server.base_url().as_str())])?;
+    let out1 = run_with_env(
+        &req1,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
     let v1: serde_json::Value = serde_json::from_str(&out1)?;
-    let sc1 = v1.get("result").and_then(|r| r.get("structuredContent")).cloned().unwrap();
+    let sc1 = v1
+        .get("result")
+        .and_then(|r| r.get("structuredContent"))
+        .cloned()
+        .unwrap();
     assert_eq!(sc1["items"][0]["name"].as_str().unwrap(), "v1.0.0");
     assert!(sc1.get("meta").is_none()); // pruned
 
     // get_tag lightweight
     let _m_ref = server.mock(|when, then| {
         when.method(GET).path("/repos/o/r/git/ref/tags/v1.0.0");
-        then.status(200).json_body(serde_json::json!({"object":{"type":"commit","sha":"aaa"}}));
+        then.status(200)
+            .json_body(serde_json::json!({"object":{"type":"commit","sha":"aaa"}}));
     });
     let req2 = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":2,
         "params":{"name":"get_tag","arguments":{"owner":"o","repo":"r","tag":"v1.0.0"}}});
-    let out2 = run_with_env(&req2, &[("GITHUB_TOKEN","t"),("GITHUB_API_URL", server.base_url().as_str())])?;
+    let out2 = run_with_env(
+        &req2,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
     assert!(out2.contains("\"type\":\"lightweight\""));
 
     // get_tag annotated
     let _m_ref2 = server.mock(|when, then| {
         when.method(GET).path("/repos/o/r/git/ref/tags/v2.0.0");
-        then.status(200).json_body(serde_json::json!({"object":{"type":"tag","sha":"bbb"}}));
+        then.status(200)
+            .json_body(serde_json::json!({"object":{"type":"tag","sha":"bbb"}}));
     });
     let _m_tag = server.mock(|when, then| {
         when.method(GET).path("/repos/o/r/git/tags/bbb");
@@ -58,7 +81,13 @@ fn list_tags_and_get_tag_mixed_types() -> anyhow::Result<()> {
     });
     let req3 = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":3,
         "params":{"name":"get_tag","arguments":{"owner":"o","repo":"r","tag":"v2.0.0"}}});
-    let out3 = run_with_env(&req3, &[("GITHUB_TOKEN","t"),("GITHUB_API_URL", server.base_url().as_str())])?;
+    let out3 = run_with_env(
+        &req3,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
     assert!(out3.contains("\"type\":\"annotated\""));
     Ok(())
 }
@@ -79,9 +108,19 @@ fn list_branches_with_protected_filter() -> anyhow::Result<()> {
     });
     let req = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":1,
         "params":{"name":"list_branches","arguments":{"owner":"o","repo":"r","limit":2,"protected":true}}});
-    let out = run_with_env(&req, &[("GITHUB_TOKEN","t"),("GITHUB_API_URL", server.base_url().as_str())])?;
+    let out = run_with_env(
+        &req,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
     let v: serde_json::Value = serde_json::from_str(&out)?;
-    let sc = v.get("result").and_then(|r| r.get("structuredContent")).cloned().unwrap();
+    let sc = v
+        .get("result")
+        .and_then(|r| r.get("structuredContent"))
+        .cloned()
+        .unwrap();
     assert_eq!(sc["items"].as_array().unwrap().len(), 2);
     Ok(())
 }
@@ -96,7 +135,13 @@ fn list_releases_and_get_release_by_tag() -> anyhow::Result<()> {
             .query_param("per_page", "1")
             .query_param("page", "1");
         then.status(200)
-            .header("link", &format!("<{}/repos/o/r/releases?page=2>; rel=\"next\"", server.base_url()))
+            .header(
+                "link",
+                &format!(
+                    "<{}/repos/o/r/releases?page=2>; rel=\"next\"",
+                    server.base_url()
+                ),
+            )
             .json_body(serde_json::json!([
                 {"id":1,"tag_name":"v1","name":"One","draft":false,"prerelease":false,
                  "created_at":null,"published_at":null,"author":{"login":"a"},"assets":[]}
@@ -104,9 +149,19 @@ fn list_releases_and_get_release_by_tag() -> anyhow::Result<()> {
     });
     let req1 = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":1,
         "params":{"name":"list_releases","arguments":{"owner":"o","repo":"r","limit":1}}});
-    let out1 = run_with_env(&req1, &[("GITHUB_TOKEN","t"),("GITHUB_API_URL", server.base_url().as_str())])?;
+    let out1 = run_with_env(
+        &req1,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
     let v1: serde_json::Value = serde_json::from_str(&out1)?;
-    let sc1 = v1.get("result").and_then(|r| r.get("structuredContent")).cloned().unwrap();
+    let sc1 = v1
+        .get("result")
+        .and_then(|r| r.get("structuredContent"))
+        .cloned()
+        .unwrap();
     assert!(sc1["meta"]["has_more"].as_bool().unwrap());
     assert!(sc1["meta"]["next_cursor"].is_string());
 
@@ -121,7 +176,13 @@ fn list_releases_and_get_release_by_tag() -> anyhow::Result<()> {
     });
     let req2 = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":2,
         "params":{"name":"get_release","arguments":{"owner":"o","repo":"r","tag":"v1"}}});
-    let out2 = run_with_env(&req2, &[("GITHUB_TOKEN","t"),("GITHUB_API_URL", server.base_url().as_str())])?;
+    let out2 = run_with_env(
+        &req2,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
     assert!(out2.contains("\"release\""));
     Ok(())
 }
@@ -147,11 +208,24 @@ fn list_starred_repositories_with_starred_at_gating() -> anyhow::Result<()> {
     });
     let req = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":1,
         "params":{"name":"list_starred_repositories","arguments":{"limit":10,"include_starred_at":true}}});
-    let out = run_with_env(&req, &[("GITHUB_TOKEN","t"),("GITHUB_API_URL", server.base_url().as_str())])?;
+    let out = run_with_env(
+        &req,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
     let v: serde_json::Value = serde_json::from_str(&out)?;
-    let sc = v.get("result").and_then(|r| r.get("structuredContent")).cloned().unwrap();
+    let sc = v
+        .get("result")
+        .and_then(|r| r.get("structuredContent"))
+        .cloned()
+        .unwrap();
     assert_eq!(sc["items"][0]["full_name"].as_str().unwrap(), "o/r");
-    assert_eq!(sc["items"][0]["starred_at"].as_str().unwrap(), "1970-01-01T00:00:00Z");
+    assert_eq!(
+        sc["items"][0]["starred_at"].as_str().unwrap(),
+        "1970-01-01T00:00:00Z"
+    );
     Ok(())
 }
 
@@ -172,9 +246,19 @@ fn search_endpoints_prune_meta_and_counts() -> anyhow::Result<()> {
     });
     let req1 = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":1,
         "params":{"name":"search_issues","arguments":{"q":"repo:o/r state:open","limit":10}}});
-    let out1 = run_with_env(&req1, &[("GITHUB_TOKEN","t"),("GITHUB_API_URL", server.base_url().as_str())])?;
+    let out1 = run_with_env(
+        &req1,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
     let v1: serde_json::Value = serde_json::from_str(&out1)?;
-    let sc1 = v1.get("result").and_then(|r| r.get("structuredContent")).cloned().unwrap();
+    let sc1 = v1
+        .get("result")
+        .and_then(|r| r.get("structuredContent"))
+        .cloned()
+        .unwrap();
     assert_eq!(sc1["total_count"].as_i64().unwrap(), 2);
     assert_eq!(sc1["items"][0]["is_pull_request"].as_bool().unwrap(), true);
     assert!(sc1.get("meta").is_none());
@@ -196,9 +280,19 @@ fn search_endpoints_prune_meta_and_counts() -> anyhow::Result<()> {
     });
     let req2 = serde_json::json!({"jsonrpc":"2.0","method":"tools/call","id":2,
         "params":{"name":"search_repositories","arguments":{"q":"rust","sort":"stars","limit":1}}});
-    let out2 = run_with_env(&req2, &[("GITHUB_TOKEN","t"),("GITHUB_API_URL", server.base_url().as_str())])?;
+    let out2 = run_with_env(
+        &req2,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
     let v2: serde_json::Value = serde_json::from_str(&out2)?;
-    let sc2 = v2.get("result").and_then(|r| r.get("structuredContent")).cloned().unwrap();
+    let sc2 = v2
+        .get("result")
+        .and_then(|r| r.get("structuredContent"))
+        .cloned()
+        .unwrap();
     assert!(sc2["meta"]["has_more"].as_bool().unwrap());
     assert!(sc2["meta"]["next_cursor"].is_string());
     Ok(())
