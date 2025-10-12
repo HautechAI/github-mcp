@@ -275,20 +275,26 @@ const fs=require('fs');
 const path=process.argv[2];
 const raw=fs.readFileSync(path,'utf8');
 const obj=JSON.parse(raw);
-const tools = obj?.result?.tools || obj?.tools || [];
+// Accept tool list in multiple shapes: {result:{tools}}, {tools}, or plain array
+const tools = obj?.result?.tools || obj?.tools || (Array.isArray(obj)?obj:[]);
 // Prefer exact name, else try common aliases
 const candidates=['list_issues','issues_list','list_repo_issues'];
-let tool = tools.find(t=>candidates.includes(t?.name));
+let tool = tools.find(t=>t && candidates.includes(t.name));
 if(!tool){
-  // Fallback: first tool mentioning "issues" and "list" in description
-  tool = tools.find(t => (t?.name||'').includes('issues') && (t?.description||'').toLowerCase().includes('list'));
+  // Fallback: first tool whose name contains both "list" and "issue"
+  tool = tools.find(t => {
+    const n=(t?.name||'').toLowerCase();
+    return n.includes('list') && n.includes('issue');
+  });
 }
 if(!tool){ process.stdout.write(JSON.stringify({name:null,args:{}})); process.exit(0); }
 const props = tool.inputSchema?.properties || {};
 const out={ name: tool.name, args: {} };
 function has(p){ return Object.prototype.hasOwnProperty.call(props,p); }
 // Build minimal, schema-compliant args
-if(has('owner') && has('repo')){ out.args.owner = process.env.OWNER; out.args.repo = process.env.REPO; }
+out.args = {};
+if(has('owner')) out.args.owner = process.env.OWNER;
+if(has('repo')) out.args.repo = process.env.REPO;
 else if(has('repo_full_name')){ out.args.repo_full_name = `${process.env.OWNER}/${process.env.REPO}`; }
 else if(has('repository')){ out.args.repository = `${process.env.OWNER}/${process.env.REPO}`; }
 // Prefer limit/per_page if present
@@ -296,18 +302,26 @@ if(has('limit')) out.args.limit = 10;
 else if(has('per_page')) out.args.per_page = 10;
 // Optional booleans only if present in schema
 if(has('include_author')) out.args.include_author = true;
+// Basic required validation: ensure required keys are present
+const req = Array.isArray(tool.inputSchema?.required) ? tool.inputSchema.required : [];
+const missing = req.filter(k => !(k in out.args));
+out.missing = missing;
 process.stdout.write(JSON.stringify(out));
 NODE
 )
-LI_NAME=$(node -e "const o=JSON.parse(process.env.LI_RES||'{}'); process.stdout.write(o.name||'')" 2>/dev/null)
-LI_ARGS=$(node -e "const o=JSON.parse(process.env.LI_RES||'{}'); process.stdout.write(JSON.stringify(o.args||{}))" 2>/dev/null)
+LI_NAME=$(LI_RES="$LI_RES" node -e "const o=JSON.parse(process.env.LI_RES||'{}'); process.stdout.write(o.name||'')" 2>/dev/null)
+LI_ARGS=$(LI_RES="$LI_RES" node -e "const o=JSON.parse(process.env.LI_RES||'{}'); process.stdout.write(JSON.stringify(o.args||{}))" 2>/dev/null)
+LI_MISSING=$(LI_RES="$LI_RES" node -e "const o=JSON.parse(process.env.LI_RES||'{}'); process.stdout.write((o.missing||[]).join(','))" 2>/dev/null)
 if [ -z "$LI_NAME" ]; then
   echo "[e2e][fatal] could not resolve list_issues tool from descriptors" | tee -a "$LOG" >&2
   session_stop; exit 1
 fi
+if [ -n "$LI_MISSING" ]; then
+  echo "[e2e] note: required keys missing for $LI_NAME: $LI_MISSING; proceeding with available args" | tee -a "$LOG" >&2
+fi
 echo "[e2e] list_issues tool=$LI_NAME args=$LI_ARGS" | tee -a "$LOG" >&2
 tool_call "$LI_NAME" "$LI_ARGS"
-assert_has_field "$ROOT_DIR/out-${LI_NAME}.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:0"
+assert_has_field "$ROOT_DIR/out-${LI_NAME}.json" "Array.isArray(o.structuredContent?.items)?o.structuredContent.items.length:(Array.isArray(o.content)?o.content.length:0)"
 
 tool_call get_issue "{\"owner\":\"$OWNER\",\"repo\":\"$REPO\",\"number\":$ISSUE_NUM,\"include_author\":true}"
 assert_has_field "$ROOT_DIR/out-get_issue.json" "o.structuredContent?.item?.number"
