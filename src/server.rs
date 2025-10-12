@@ -4928,14 +4928,21 @@ fn handle_get_pr_status_summary(id: Option<Id>, params: Value) -> Response {
     rpc_ok(id, wrapped)
 }
 
-fn limit_from_map(map: &Option<std::collections::HashMap<String, u32>>, key: &str, default_: u32) -> u32 {
+fn limit_from_map(
+    map: &Option<std::collections::HashMap<String, u32>>,
+    key: &str,
+    default_: u32,
+) -> u32 {
     map.as_ref()
         .and_then(|m| m.get(key).cloned())
         .unwrap_or(default_)
         .min(100)
 }
 
-fn cursor_from_map(map: &Option<std::collections::HashMap<String, String>>, key: &str) -> Option<String> {
+fn cursor_from_map(
+    map: &Option<std::collections::HashMap<String, String>>,
+    key: &str,
+) -> Option<String> {
     map.as_ref().and_then(|m| m.get(key).cloned())
 }
 
@@ -4945,8 +4952,14 @@ fn handle_get_issue_overview(id: Option<Id>, params: Value) -> Response {
         Ok(v) => v,
         Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
     };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
-    let include = input.include.clone().unwrap_or_else(|| vec!["basic".into(), "comments".into()]);
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let include = input
+        .include
+        .clone()
+        .unwrap_or_else(|| vec!["basic".into(), "comments".into()]);
     let include_author = input.include_author.unwrap_or(false);
     let limit_comments = limit_from_map(&input.section_limits, "comments", 30);
     let cursor_comments = cursor_from_map(&input.section_cursors, "comments");
@@ -5004,19 +5017,42 @@ fn handle_get_issue_overview(id: Option<Id>, params: Value) -> Response {
         let item = GetIssueOverviewItem{ basic, body: if include_body { issue.body } else { None }, comments };
         (Some(item), Meta{ next_cursor: None, has_more: false, rate: gql_meta.rate }, None)
     });
-    let out = GetIssueOverviewOutput{ item, meta, error: err };
+    let out = GetIssueOverviewOutput {
+        item,
+        meta,
+        error: err,
+    };
     let structured = serde_json::to_value(&out).unwrap();
     let text = Some("issue overview".to_string());
-    let is_error = structured.get("error").and_then(|e| if e.is_null(){None}else{Some(e)}).is_some();
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }
 
 fn handle_get_pr_overview(id: Option<Id>, params: Value) -> Response {
     use crate::tools::*;
-    let input: GetPullRequestOverviewInput = match serde_json::from_value(params) { Ok(v) => v, Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None) };
-    let cfg = match Config::from_env() { Ok(c) => c, Err(e) => return rpc_error(id, -32603, &e, None) };
-    let include = input.include.clone().unwrap_or_else(|| vec!["basic".into(), "comments".into(), "review_comments".into(), "reviews".into(), "commits".into(), "files".into(), "status_summary".into()]);
+    let input: GetPullRequestOverviewInput = match serde_json::from_value(params) {
+        Ok(v) => v,
+        Err(e) => return rpc_error(id, -32602, &format!("Invalid params: {}", e), None),
+    };
+    let cfg = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => return rpc_error(id, -32603, &e, None),
+    };
+    let include = input.include.clone().unwrap_or_else(|| {
+        vec![
+            "basic".into(),
+            "comments".into(),
+            "review_comments".into(),
+            "reviews".into(),
+            "commits".into(),
+            "files".into(),
+            "status_summary".into(),
+        ]
+    });
     let include_author = input.include_author.unwrap_or(false);
     let include_location = input.include_location.unwrap_or(false);
     let files_include_patch = input.files_include_patch.unwrap_or(false);
@@ -5219,10 +5255,17 @@ fn handle_get_pr_overview(id: Option<Id>, params: Value) -> Response {
         let item = GetPullRequestOverviewItem{ basic, body: if include_body { pr.body } else { None }, comments, review_comments, review_threads, reviews, commits, files, status_summary };
         (Some(item), Meta{ next_cursor: None, has_more: false, rate: rate_meta.rate }, None)
     });
-    let out = GetPullRequestOverviewOutput{ item, meta, error: err };
+    let out = GetPullRequestOverviewOutput {
+        item,
+        meta,
+        error: err,
+    };
     let structured = serde_json::to_value(&out).unwrap();
     let text = Some("pr overview".to_string());
-    let is_error = structured.get("error").and_then(|e| if e.is_null(){None}else{Some(e)}).is_some();
+    let is_error = structured
+        .get("error")
+        .and_then(|e| if e.is_null() { None } else { Some(e) })
+        .is_some();
     let wrapped = mcp_wrap(structured, text, is_error);
     rpc_ok(id, wrapped)
 }

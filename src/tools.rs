@@ -868,10 +868,17 @@ pub struct PrBasicItem {
 }
 
 #[derive(Debug, Serialize)]
-pub struct StatusCounts { pub success: i32, pub pending: i32, pub failure: i32 }
+pub struct StatusCounts {
+    pub success: i32,
+    pub pending: i32,
+    pub failure: i32,
+}
 
 #[derive(Debug, Serialize)]
-pub struct CheckContext { pub name: String, pub state: String }
+pub struct CheckContext {
+    pub name: String,
+    pub state: String,
+}
 
 #[derive(Debug, Serialize)]
 pub struct StatusSummary {

@@ -89,13 +89,26 @@ fn get_pull_request_body_gating() -> anyhow::Result<()> {
     let body = serde_json::json!({
       "data": {"repository": {"pullRequest": {"id":"PR_1","number":1,"title":"PR One","body":"b","state":"OPEN","isDraft":false,"merged":false,"mergedAt":null,"createdAt":"2025-01-01T00:00:00Z","updatedAt":"2025-01-01T00:00:00Z","author":{"login":"alice"}}}, "rateLimit": {"remaining": 5000, "used": 1, "resetAt": "2030-01-01T00:00:00Z"}}}
     );
-    let _m = server.mock(|when, then| { when.method(POST).path("/graphql"); then.status(200).json_body(body.clone()); });
+    let _m = server.mock(|when, then| {
+        when.method(POST).path("/graphql");
+        then.status(200).json_body(body.clone());
+    });
     // Without include=["body"] -> body should be omitted in output
     let req1 = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":1,
         "params":{"name":"get_pull_request","arguments": {"owner":"o","repo":"r","number":1}}
     });
-    let out1 = run_with_env(&req1, &[("GITHUB_TOKEN","t"),("GITHUB_GRAPHQL_URL", &format!("{}/graphql", server.base_url())), ("GITHUB_API_URL", server.base_url().as_str())])?;
+    let out1 = run_with_env(
+        &req1,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            (
+                "GITHUB_GRAPHQL_URL",
+                &format!("{}/graphql", server.base_url()),
+            ),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
     assert!(out1.contains("\"structuredContent\""));
     // Ensure body is not present
     assert!(!out1.contains("\"body\":\"b\""));
@@ -104,7 +117,17 @@ fn get_pull_request_body_gating() -> anyhow::Result<()> {
         "jsonrpc":"2.0","method":"tools/call","id":2,
         "params":{"name":"get_pull_request","arguments": {"owner":"o","repo":"r","number":1, "include": ["body"]}}
     });
-    let out2 = run_with_env(&req2, &[("GITHUB_TOKEN","t"),("GITHUB_GRAPHQL_URL", &format!("{}/graphql", server.base_url())), ("GITHUB_API_URL", server.base_url().as_str())])?;
+    let out2 = run_with_env(
+        &req2,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            (
+                "GITHUB_GRAPHQL_URL",
+                &format!("{}/graphql", server.base_url()),
+            ),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
     assert!(out2.contains("\"body\":\"b\""));
     Ok(())
 }
@@ -115,12 +138,25 @@ fn get_pull_request_overview_basic() -> anyhow::Result<()> {
     let body = serde_json::json!({
       "data": {"repository": {"pullRequest": {"id":"PR_1","number":1,"title":"PR One","body":"b","state":"OPEN","isDraft":false,"merged":false,"mergedAt":null,"createdAt":"2025-01-01T00:00:00Z","updatedAt":"2025-01-01T00:00:00Z","author":{"login":"alice"}}}, "rateLimit": {"remaining": 5000, "used": 1, "resetAt": "2030-01-01T00:00:00Z"}}}
     );
-    let _m = server.mock(|when, then| { when.method(POST).path("/graphql"); then.status(200).json_body(body.clone()); });
+    let _m = server.mock(|when, then| {
+        when.method(POST).path("/graphql");
+        then.status(200).json_body(body.clone());
+    });
     let req = serde_json::json!({
         "jsonrpc":"2.0","method":"tools/call","id":1,
         "params":{"name":"get_pull_request_overview","arguments": {"owner":"o","repo":"r","number":1, "include": ["basic","body"]}}
     });
-    let out = run_with_env(&req, &[("GITHUB_TOKEN","t"),("GITHUB_GRAPHQL_URL", &format!("{}/graphql", server.base_url())), ("GITHUB_API_URL", server.base_url().as_str())])?;
+    let out = run_with_env(
+        &req,
+        &[
+            ("GITHUB_TOKEN", "t"),
+            (
+                "GITHUB_GRAPHQL_URL",
+                &format!("{}/graphql", server.base_url()),
+            ),
+            ("GITHUB_API_URL", server.base_url().as_str()),
+        ],
+    )?;
     assert!(out.contains("\"structuredContent\""));
     assert!(out.contains("\"basic\""));
     assert!(out.contains("\"body\":\"b\""));
