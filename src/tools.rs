@@ -244,6 +244,136 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
         input_schema: serde_json::json!({"type":"object","additionalProperties":false,"properties":{"owner":{"type":"string"},"repo":{"type":"string"},"number":{"type":"integer"}},"required":["owner","repo","number"]}),
     };
 
+    // Phase B: Core PR mutation tools (Issue #107)
+    let request_reviewers = ToolDescriptor {
+        name: "request_reviewers".into(),
+        description: "Request reviewers on a pull request".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties":{
+                "owner":{"type":"string"},
+                "repo":{"type":"string"},
+                "number":{"type":"integer"},
+                "reviewers":{"type":"array","items":{"type":"string"}},
+                "team_reviewers":{"type":"array","items":{"type":"string"}}
+            },
+            "required":["owner","repo","number"]
+        }),
+    };
+
+    let add_pr_comment = ToolDescriptor {
+        name: "add_pr_comment".into(),
+        description: "Add a general comment to a pull request (issue timeline)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties":{
+                "owner":{"type":"string"},
+                "repo":{"type":"string"},
+                "number":{"type":"integer"},
+                "body":{"type":"string"}
+            },
+            "required":["owner","repo","number","body"]
+        }),
+    };
+
+    let add_pr_review_comment_inline = ToolDescriptor {
+        name: "add_pr_review_comment_inline".into(),
+        description: "Add an inline review comment on a pull request diff".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties":{
+                "owner":{"type":"string"},
+                "repo":{"type":"string"},
+                "number":{"type":"integer"},
+                "commit_sha":{"type":"string"},
+                "path":{"type":"string"},
+                "side":{"type":"string","enum":["LEFT","RIGHT","left","right"]},
+                "line":{"type":"integer"},
+                "start_line":{"type":"integer"},
+                "start_side":{"type":"string","enum":["LEFT","RIGHT","left","right"]},
+                "body":{"type":"string"}
+            },
+            "required":["owner","repo","number","commit_sha","path","side","line","body"]
+        }),
+    };
+
+    let submit_pr_review = ToolDescriptor {
+        name: "submit_pr_review".into(),
+        description: "Submit a review on a pull request (COMMENT, APPROVE, REQUEST_CHANGES)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties":{
+                "owner":{"type":"string"},
+                "repo":{"type":"string"},
+                "number":{"type":"integer"},
+                "event":{"type":"string","enum":["COMMENT","APPROVE","REQUEST_CHANGES"]},
+                "body":{"type":"string"}
+            },
+            "required":["owner","repo","number","event"]
+        }),
+    };
+
+    let mark_pr_ready = ToolDescriptor {
+        name: "mark_pull_request_ready_for_review".into(),
+        description: "Mark a draft pull request as ready for review (GraphQL)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties":{
+                "owner":{"type":"string"},
+                "repo":{"type":"string"},
+                "number":{"type":"integer"}
+            },
+            "required":["owner","repo","number"]
+        }),
+    };
+
+    let convert_pr_to_draft = ToolDescriptor {
+        name: "convert_pull_request_to_draft".into(),
+        description: "Convert a pull request to draft (GraphQL)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties":{
+                "owner":{"type":"string"},
+                "repo":{"type":"string"},
+                "number":{"type":"integer"}
+            },
+            "required":["owner","repo","number"]
+        }),
+    };
+
+    let merge_pull_request = ToolDescriptor {
+        name: "merge_pull_request".into(),
+        description: "Merge a pull request with guard (default squash)".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties":{
+                "owner":{"type":"string"},
+                "repo":{"type":"string"},
+                "number":{"type":"integer"},
+                "merge_method":{"type":"string","enum":["merge","squash","rebase"]},
+                "commit_title":{"type":"string"},
+                "commit_message":{"type":"string"},
+                "expected_head_sha":{"type":"string"}
+            },
+            "required":["owner","repo","number"]
+        }),
+    };
+
+    let update_pr_branch = ToolDescriptor {
+        name: "update_pr_branch".into(),
+        description: "Update a pull request branch to the latest base".into(),
+        input_schema: serde_json::json!({
+            "type":"object","additionalProperties":false,
+            "properties":{
+                "owner":{"type":"string"},
+                "repo":{"type":"string"},
+                "number":{"type":"integer"},
+                "expected_head_sha":{"type":"string"}
+            },
+            "required":["owner","repo","number"]
+        }),
+    };
+
     // Overview endpoints (Issue #107)
     let get_issue_overview = ToolDescriptor {
         name: "get_issue_overview".into(),
@@ -546,6 +676,15 @@ pub fn tool_descriptors() -> Vec<ToolDescriptor> {
         list_pr_files_unified,
         get_pr_diff,
         get_pr_patch,
+        // Phase B mutations
+        request_reviewers,
+        add_pr_comment,
+        add_pr_review_comment_inline,
+        submit_pr_review,
+        mark_pr_ready,
+        convert_pr_to_draft,
+        merge_pull_request,
+        update_pr_branch,
         get_issue_overview,
         get_pr_overview,
         pr_summary,
@@ -1592,6 +1731,186 @@ pub struct MergePrInput {
     pub commit_title: Option<String>,
     pub commit_message: Option<String>,
     pub sha: Option<String>,
+}
+
+// Phase B tool inputs/outputs (Issue #107)
+#[derive(Debug, Deserialize)]
+pub struct RequestReviewersInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reviewers: Option<Vec<String>>, // user logins
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub team_reviewers: Option<Vec<String>>, // team slugs
+}
+
+#[derive(Debug, Serialize)]
+pub struct RequestReviewersOutputItem {
+    pub requested: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RequestReviewersOutput {
+    pub item: Option<RequestReviewersOutputItem>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AddPrCommentInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    pub body: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AddPrCommentOutputItem {
+    pub id: i64,
+    pub body: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AddPrCommentOutput {
+    pub item: Option<AddPrCommentOutputItem>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AddPrReviewCommentInlineInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    pub commit_sha: String,
+    pub path: String,
+    pub side: String,
+    pub line: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_line: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_side: Option<String>,
+    pub body: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AddPrReviewCommentInlineOutputItem {
+    pub id: i64,
+    pub body: String,
+    pub path: String,
+    pub line: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AddPrReviewCommentInlineOutput {
+    pub item: Option<AddPrReviewCommentInlineOutputItem>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SubmitPrReviewInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    pub event: String, // COMMENT | APPROVE | REQUEST_CHANGES
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SubmitPrReviewOutputItem {
+    pub id: i64,
+    pub state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub submitted_at: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SubmitPrReviewOutput {
+    pub item: Option<SubmitPrReviewOutputItem>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ToggleDraftInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ToggleDraftOutputItem {
+    pub ok: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ToggleDraftOutput {
+    pub item: Option<ToggleDraftOutputItem>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MergePullRequestInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merge_method: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit_title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_head_sha: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MergePullRequestOutputItem {
+    pub merged: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sha: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MergePullRequestOutput {
+    pub item: Option<MergePullRequestOutputItem>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdatePrBranchInput {
+    pub owner: String,
+    pub repo: String,
+    pub number: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_head_sha: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UpdatePrBranchOutputItem {
+    pub ok: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UpdatePrBranchOutput {
+    pub item: Option<UpdatePrBranchOutputItem>,
+    pub meta: Meta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorShape>,
 }
 #[derive(Debug, Serialize)]
 pub struct MergePrResult {
